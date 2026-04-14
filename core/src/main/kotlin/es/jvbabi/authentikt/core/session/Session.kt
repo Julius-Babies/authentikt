@@ -14,4 +14,19 @@ class Session {
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 
     var identifiedUser: AuthentiktUser? = null
+
+    val authenticationSteps = mutableListOf<AuthenticationStep>()
 }
+
+sealed class AuthenticationStep(
+    val type: Type
+) {
+    enum class Type {
+        Primary,
+        Secondary,
+    }
+}
+
+class PasswordAuthenticationStep() : AuthenticationStep(
+    type = Type.Primary
+)

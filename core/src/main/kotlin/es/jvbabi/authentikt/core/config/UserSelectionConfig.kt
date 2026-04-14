@@ -16,11 +16,13 @@ class UserSelectionConfig {
         )
     }
 
-    internal fun validate() {
+    internal fun validate(): Boolean {
         assert(listOf(
             emailConfig is UserSelectionEmailConfig.Enabled,
             usernameConfig is UserSelectionUsernameConfig.Enabled,
         ).any()) { "At least one user selection mode is required!" }
+
+        return true
     }
 }
 

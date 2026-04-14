@@ -1,6 +1,9 @@
 package es.jvbabi.authentikt.core
 
 abstract class AuthentiktUser {
+
     abstract suspend fun getEmail(): String?
     abstract suspend fun getUsername(): String?
+    abstract suspend fun getDisplayName(): String?
+    abstract suspend fun checkPassword(password: String): Boolean
 }
