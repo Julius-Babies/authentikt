@@ -3,4 +3,6 @@ plugins {
 }
 
 rootProject.name = "authentikt"
+
 include(":core")
+include(":samples")

@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm")
+    alias(libs.plugins.kotlin.jvm)
 }
 
 group = "es.jvbabi.authentikt"
@@ -10,11 +10,15 @@ repositories {
 }
 
 dependencies {
-    testImplementation(kotlin("test"))
+    implementation(libs.ktor.server.core)
 }
 
 kotlin {
     jvmToolchain(25)
+
+    compilerOptions {
+        optIn.add("kotlin.uuid.ExperimentalUuidApi")
+    }
 }
 
 tasks.test {
