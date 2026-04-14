@@ -1,6 +1,6 @@
 package es.jvbabi.authentikt.samples
 
-import es.jvbabi.authentikt.core.Authentikt
+import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
 import io.ktor.serialization.kotlinx.json.json
@@ -26,15 +26,15 @@ val users = listOf(
     ),
 )
 
-fun User.toAuthentiktUser() = object : AuthentiktUser() {
+fun User.toAuthentiktUser() = object : AuthentiktUser<User>(this) {
     override suspend fun getEmail(): String = email
     override suspend fun getUsername(): String = username
     override suspend fun getDisplayName(): String = displayName
     override suspend fun checkPassword(password: String): Boolean = this@toAuthentiktUser.password == password
 }
 
-class AppUserSource: AuthentiktUserSource {
-    override suspend fun findUserByEmail(email: String): AuthentiktUser? {
+class AppUserSource: AuthentiktUserSource<User> {
+    override suspend fun findUserByEmail(email: String): AuthentiktUser<User>? {
         return users.find { it.email == email }?.toAuthentiktUser()
     }
 }
@@ -51,7 +51,7 @@ fun Application.module() {
         })
     }
 
-    install(Authentikt) {
+    installAuthentikt {
         authentiktUserSource = AppUserSource()
 
         userSelection {

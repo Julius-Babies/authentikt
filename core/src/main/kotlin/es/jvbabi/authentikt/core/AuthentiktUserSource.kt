@@ -1,5 +1,5 @@
 package es.jvbabi.authentikt.core
 
-interface AuthentiktUserSource {
-    suspend fun findUserByEmail(email: String): AuthentiktUser?
+interface AuthentiktUserSource<USER> {
+    suspend fun findUserByEmail(email: String): AuthentiktUser<USER>?
 }

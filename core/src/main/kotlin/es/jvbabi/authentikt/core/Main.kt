@@ -1,26 +1,28 @@
 package es.jvbabi.authentikt.core
 
-import es.jvbabi.authentikt.core.config.AuthentiktPluginConfiguration
+import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
+import es.jvbabi.authentikt.core.config.AuthentiktPluginConfigurationBuilder
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.routes.flow.email.loginEmail
 import es.jvbabi.authentikt.core.routes.flow.password.password
 import es.jvbabi.authentikt.core.routes.flow.start.startFlow
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.sessions
-import io.ktor.server.application.*
-import io.ktor.server.routing.*
+import io.ktor.server.application.Application
+import io.ktor.server.application.createRouteScopedPlugin
+import io.ktor.server.application.install
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
 
-internal lateinit var authentiktPluginConfiguration: AuthentiktPluginConfiguration
+internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
 
-val Authentikt = createApplicationPlugin(
-    name = "Authentikt",
-    createConfiguration = ::AuthentiktPluginConfiguration,
-) {
-    this.pluginConfig.validate()
-    authentiktPluginConfiguration = this.pluginConfig
+fun <USER> Application.installAuthentikt(block: AuthentiktPluginConfigurationBuilder<USER>.() -> Unit) {
+    val builder = AuthentiktPluginConfigurationBuilder<USER>().apply(block)
+    val configuration = builder.build()
+    authentiktPluginConfiguration = configuration
 
-    this.application.routing {
-        route("${authentiktPluginConfiguration.apiPrefix}/authentikt") {
+    routing {
+        route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
                 route("/start") {
                     startFlow()
@@ -35,9 +37,9 @@ val Authentikt = createApplicationPlugin(
                         }
                     }.let { this@sessionScopedRoute.install(it) }
 
-                    route("/check") { checkFlowStatus() }
+                    route("/check") { checkFlowStatus(configuration) }
 
-                    route("/email") { loginEmail() }
+                    route("/email") { loginEmail(configuration) }
 
                     route("/password") { password() }
                 }

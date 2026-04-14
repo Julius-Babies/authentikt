@@ -13,7 +13,7 @@ val sessions = mutableMapOf<SessionId, Session>()
 class Session {
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 
-    var identifiedUser: AuthentiktUser? = null
+    var identifiedUser: AuthentiktUser<*>? = null
 
     val authenticationSteps = mutableListOf<AuthenticationStep>()
 }

@@ -1,6 +1,6 @@
 package es.jvbabi.authentikt.core.routes.flow.check
 
-import es.jvbabi.authentikt.core.authentiktPluginConfiguration
+import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.UserSelectionEmailConfig
 import es.jvbabi.authentikt.core.config.UserSelectionUsernameConfig
 import es.jvbabi.authentikt.core.session.AuthenticationStep
@@ -9,7 +9,7 @@ import es.jvbabi.authentikt.core.utils.buildGenericMap
 import es.jvbabi.authentikt.core.utils.respondGson
 import io.ktor.server.routing.*
 
-fun Route.checkFlowStatus() {
+fun Route.checkFlowStatus(configuration: AuthentiktConfiguration<*>) {
     get {
         val session = call.attributes[SessionKey]
 
@@ -20,7 +20,7 @@ fun Route.checkFlowStatus() {
                 put("state", buildGenericMap {
                     put("type", "user_selection")
                     put("email", buildGenericMap {
-                        val config = authentiktPluginConfiguration.userSelection!!.emailConfig
+                        val config = configuration.userSelection.emailConfig
                         val isEnabled = config is UserSelectionEmailConfig.Enabled
                         put("enabled", isEnabled)
 
@@ -30,7 +30,7 @@ fun Route.checkFlowStatus() {
                     })
 
                     put("username", buildGenericMap {
-                        val config = authentiktPluginConfiguration.userSelection!!.usernameConfig
+                        val config = configuration.userSelection.usernameConfig
                         val isEnabled = config is UserSelectionUsernameConfig.Enabled
                         put("enabled", isEnabled)
                         if (config is UserSelectionUsernameConfig.Enabled) {
