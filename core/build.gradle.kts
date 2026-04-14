@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation(libs.ktor.server.core)
+    implementation(libs.gson)
 }
 
 kotlin {

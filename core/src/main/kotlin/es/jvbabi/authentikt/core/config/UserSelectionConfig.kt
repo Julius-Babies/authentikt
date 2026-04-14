@@ -1,8 +1,8 @@
 package es.jvbabi.authentikt.core.config
 
 class UserSelectionConfig {
-    private var emailConfig: UserSelectionEmailConfig = UserSelectionEmailConfig.Disabled
-    private var usernameConfig: UserSelectionUsernameConfig = UserSelectionUsernameConfig.Disabled
+    internal var emailConfig: UserSelectionEmailConfig = UserSelectionEmailConfig.Disabled
+    internal var usernameConfig: UserSelectionUsernameConfig = UserSelectionUsernameConfig.Disabled
 
     fun email(withUsername: Boolean = false) {
         this.emailConfig = UserSelectionEmailConfig.Enabled(

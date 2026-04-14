@@ -2,8 +2,11 @@ package es.jvbabi.authentikt.core.config
 
 class AuthentiktPluginConfiguration {
 
-    fun userSelection(block: UserSelectionConfig.() -> Unit) {
+    internal lateinit var userSelection: UserSelectionConfig
+    var apiPrefix = ""
 
+    fun userSelection(block: UserSelectionConfig.() -> Unit) {
+        userSelection = UserSelectionConfig().apply(block)
     }
 
     fun userAuthorization(block: UserAuthorizationConfig.() -> Unit) {
