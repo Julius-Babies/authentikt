@@ -1,6 +1,5 @@
 package es.jvbabi.authentikt.core.config
 
-import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin

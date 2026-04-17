@@ -3,8 +3,11 @@ kotlin = "2.3.20"
 ktor = "3.4.2"
 logback = "1.5.32"
 gson = "2.13.1"
+totp = "2.4.1"
 
 [libraries]
+kotlin-onetimepassword = { module = "dev.turingcomplete:kotlin-onetimepassword", version.ref="totp" }
+
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
 ktor-server-config-yaml = { module = "io.ktor:ktor-server-config-yaml", version.ref = "ktor" }

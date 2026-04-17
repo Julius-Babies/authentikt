@@ -12,6 +12,7 @@ repositories {
 
 dependencies {
     implementation(libs.ktor.server.core)
+    implementation(libs.kotlin.onetimepassword)
     implementation(libs.gson)
 }
 
@@ -20,6 +21,7 @@ kotlin {
 
     compilerOptions {
         optIn.add("kotlin.uuid.ExperimentalUuidApi")
+        freeCompilerArgs.add("-Xlocal-type-aliases")
     }
 }
 

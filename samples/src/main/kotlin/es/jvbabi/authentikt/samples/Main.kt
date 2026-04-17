@@ -5,6 +5,7 @@ import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -16,7 +17,8 @@ data class User(
     val email: String,
     val displayName: String,
     val username: String,
-    val password: String
+    val password: String,
+    val otpSecret: String?,
 )
 
 val users = listOf(
@@ -25,7 +27,16 @@ val users = listOf(
         displayName = "Admin",
         username = "admin",
         password = "password",
+        otpSecret = "X3V3UD62XVWDX7GH",
     ),
+
+    User(
+        email = "eric.smith@acme.com",
+        displayName = "Eric Smith",
+        username = "eric.smith",
+        password = "password",
+        otpSecret = null,
+    )
 )
 
 fun User.toAuthentiktUser() = object : AuthentiktUser<User>(this) {
@@ -56,6 +67,8 @@ fun Application.module() {
         checkPassword { user, password -> user.password == password }
     }
 
+    val otpPlugin = TotpPlugin<User> {}
+
     installAuthentikt {
         authentiktUserSource = AppUserSource()
 
@@ -67,6 +80,7 @@ fun Application.module() {
 
         authorization { session, user ->
             if (!session.has(passwordPlugin)) return@authorization passwordPlugin
+            if (!session.has(otpPlugin) && user.user.otpSecret != null) return@authorization otpPlugin
 
             return@authorization DonePlugin
         }
