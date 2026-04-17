@@ -3,7 +3,6 @@ package es.jvbabi.authentikt.core.routes.flow.check
 import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.UserSelectionEmailConfig
 import es.jvbabi.authentikt.core.config.UserSelectionUsernameConfig
-import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
@@ -13,7 +12,7 @@ import io.ktor.server.routing.*
 
 internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration<USER>) {
     get {
-        val session = call.attributes[SessionKey]
+        val session = call.attributes[SessionKey] as Session<USER>
 
         val user = session.identifiedUser
 
@@ -45,19 +44,7 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
             return@get
         }
 
-        val currentStep = session.authenticationSteps.lastOrNull()
-
-        val (stepForUser, data) = if (currentStep == null || currentStep.second.isCompleted()) {
-            val nextStep = configuration.findNextStepCallback(session, user as AuthentiktUser<USER>)
-
-            if (nextStep !in configuration.installedPlugins)
-                throw NotInstalledPluginCalled(nextStep, session)
-
-            val data = nextStep.createState(session)
-            session.authenticationSteps.add(nextStep to data)
-
-            nextStep to data
-        } else currentStep
+        val (stepForUser, data) = session.authenticationSteps.last()
 
         call.respondGson(buildGenericMap {
             put("type", "step")
@@ -67,7 +54,7 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
     }
 }
 
-class NotInstalledPluginCalled(val plugin: BasePlugin<*>, val session: Session): Exception(buildString {
+class NotInstalledPluginCalled(val plugin: BasePlugin<*>, val session: Session<*>): Exception(buildString {
     append("Plugin ${plugin.namespace} has been selected in session ${session.sessionId} but was not installed in ")
     append("Authentikt. Please call install(yourPlugin) in installAuthentikt { ... } first.")
 })

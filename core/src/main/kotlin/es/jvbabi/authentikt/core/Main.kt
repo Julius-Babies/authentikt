@@ -26,7 +26,7 @@ fun <USER> Application.installAuthentikt(
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
                 route("/start") {
-                    startFlow()
+                    startFlow(configuration)
                 }
 
                 route("/{sessionId}") sessionScopedRoute@{

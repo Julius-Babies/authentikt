@@ -24,6 +24,10 @@ dependencies {
 
 kotlin {
     jvmToolchain(25)
+
+    compilerOptions {
+        freeCompilerArgs.add("-Xskip-prerelease-check")
+    }
 }
 
 tasks.test {

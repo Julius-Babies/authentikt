@@ -20,7 +20,7 @@ class PasswordPlugin<USER>(
         .apply(configuration)
         .build()
 
-    override suspend fun createState(session: Session): PasswordState {
+    override suspend fun createState(session: Session<*>): PasswordState {
         return PasswordState(false)
     }
 
@@ -34,6 +34,7 @@ class PasswordPlugin<USER>(
 
                 if (isValid) {
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@PasswordPlugin to PasswordState(true)
+                    session.nextStep()
                 }
 
                 call.respond(buildMap { put("success", isValid) })
@@ -47,7 +48,7 @@ data class PasswordState(
 ): BaseState {
     override suspend fun isCompleted(): Boolean = this.isValidated
 
-    override suspend fun createClientState(session: Session): Map<String, Any?> = buildGenericMap {
+    override suspend fun createClientState(session: Session<*>): Map<String, Any?> = buildGenericMap {
         put("validated", this@PasswordState.isValidated)
     }
 }

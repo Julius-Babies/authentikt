@@ -15,7 +15,7 @@ abstract class BasePlugin<STATE: BaseState>(
     /**
      * Create an initial state to push to session stack.
      */
-    abstract suspend fun createState(session: Session): STATE
+    abstract suspend fun createState(session: Session<*>): STATE
 
     /**
      * Install all the routes necessary for the plugin. Use `call.attributes[es.jvbabi.authentikt.core.session.SessionKey]`

@@ -4,9 +4,9 @@ import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 
-typealias FindNextStepCallback<USER> = suspend (session: Session, user: es.jvbabi.authentikt.core.AuthentiktUser<USER>) -> BasePlugin<*>
+typealias FindNextStepCallback<USER> = suspend (session: Session<*>, user: es.jvbabi.authentikt.core.AuthentiktUser<USER>) -> BasePlugin<*>
 
-internal class AuthentiktConfiguration<USER>(
+class AuthentiktConfiguration<USER>(
     val userSelection: UserSelectionConfig,
     val authentiktUserSource: AuthentiktUserSource<USER>,
     val findNextStepCallback: FindNextStepCallback<USER>,

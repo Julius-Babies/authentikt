@@ -9,7 +9,7 @@ import io.ktor.server.routing.*
 object DonePlugin: BasePlugin<EmptyBaseState>(
     namespace = "authentikt-builtin/done",
 ) {
-    override suspend fun createState(session: Session): EmptyBaseState {
+    override suspend fun createState(session: Session<*>): EmptyBaseState {
         return EmptyBaseState()
     }
 

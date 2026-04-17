@@ -1,6 +1,7 @@
 package es.jvbabi.authentikt.core.routes.flow.email
 
 import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
+import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.utils.buildGenericMap
 import es.jvbabi.authentikt.core.utils.respondGson
@@ -23,7 +24,9 @@ internal fun <USER> Route.loginEmail(configuration: AuthentiktConfiguration<USER
             return@post
         }
 
-        call.attributes[SessionKey].identifiedUser = user
+        val session = call.attributes[SessionKey] as Session<USER>
+        session.identifiedUser = user
+        session.nextStep()
 
         call.respondGson(buildGenericMap {
             put("type", "success")

@@ -90,7 +90,7 @@ fun Application.module() {
             email(withUsername = true)
         }
 
-        authorization { session: Session, user: AuthentiktUser<User> ->
+        authorization { session: Session<*>, user: AuthentiktUser<User> ->
             if (!session.has(passwordPlugin)) return@authorization passwordPlugin
             if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
 

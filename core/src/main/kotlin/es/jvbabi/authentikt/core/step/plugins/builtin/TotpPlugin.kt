@@ -28,7 +28,7 @@ class TotpPlugin<USER>(
         .apply(configuration)
         .build()
 
-    override suspend fun createState(session: Session): TotpState {
+    override suspend fun createState(session: Session<*>): TotpState {
         return TotpState(isValidated = false)
     }
 
@@ -42,6 +42,7 @@ class TotpPlugin<USER>(
 
                 if (success) {
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@TotpPlugin to TotpState(true)
+                    session.nextStep()
                 }
 
                 call.respondGson(buildMap { put("success", success) })
@@ -58,7 +59,7 @@ data class TotpRequest(
 data class TotpState(
     val isValidated: Boolean,
 ) : BaseState {
-    override suspend fun createClientState(session: Session): Map<String, Any?> = buildGenericMap {
+    override suspend fun createClientState(session: Session<*>): Map<String, Any?> = buildGenericMap {
         put("validated", this@TotpState.isValidated)
     }
 
