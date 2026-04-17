@@ -70,9 +70,5 @@ fun Application.module() {
 
             return@authorization DonePlugin
         }
-
-        onSuccess { user ->
-            println(user.getEmail() ?: "unknown")
-        }
     }
 }

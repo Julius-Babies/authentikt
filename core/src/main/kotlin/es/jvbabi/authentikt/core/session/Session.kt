@@ -1,7 +1,7 @@
 package es.jvbabi.authentikt.core.session
 
 import es.jvbabi.authentikt.core.AuthentiktUser
-import es.jvbabi.authentikt.core.step.StepState
+import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.util.AttributeKey
 import kotlin.uuid.Uuid
@@ -17,7 +17,7 @@ class Session {
 
     var identifiedUser: AuthentiktUser<*>? = null
 
-    val authenticationSteps = mutableListOf<Pair<BasePlugin<*>, StepState>>()
+    val authenticationSteps = mutableListOf<Pair<BasePlugin<*>, BaseState>>()
 
     /**
      * Checks if a session has a step already taken or completed.

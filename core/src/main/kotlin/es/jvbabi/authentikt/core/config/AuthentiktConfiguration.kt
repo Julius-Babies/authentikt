@@ -12,6 +12,5 @@ internal class AuthentiktConfiguration<USER>(
     val authentiktUserSource: AuthentiktUserSource<USER>,
     val findNextStepCallback: FindNextStepCallback,
     val apiPrefix: String,
-    val onSuccess: suspend (user: AuthentiktUser<USER>) -> Unit,
     val installedPlugins: Set<BasePlugin<*>>
 )

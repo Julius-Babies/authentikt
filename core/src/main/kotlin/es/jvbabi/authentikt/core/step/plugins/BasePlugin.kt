@@ -1,7 +1,7 @@
 package es.jvbabi.authentikt.core.step.plugins
 
 import es.jvbabi.authentikt.core.session.Session
-import es.jvbabi.authentikt.core.step.StepState
+import es.jvbabi.authentikt.core.step.BaseState
 import io.ktor.server.routing.Route
 
 /**
@@ -9,7 +9,7 @@ import io.ktor.server.routing.Route
  * It is recommended to use a reverse-domain syntax (com.example.authentikt.secure-auth) or a group/project syntax like
  * example/secure-auth.
  */
-abstract class BasePlugin<STATE: StepState>(
+abstract class BasePlugin<STATE: BaseState>(
     val namespace: String,
 ) {
     /**

@@ -2,8 +2,9 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
-import es.jvbabi.authentikt.core.step.StepState
+import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
+import es.jvbabi.authentikt.core.utils.buildGenericMap
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -43,9 +44,12 @@ class PasswordPlugin<USER>(
 
 data class PasswordState(
     val isValidated: Boolean,
-): StepState {
+): BaseState {
     override suspend fun isCompleted(): Boolean = this.isValidated
-    override suspend fun createClientState(session: Session): String = this.isValidated.toString()
+
+    override suspend fun createClientState(session: Session): Map<String, Any?> = buildGenericMap {
+        put("validated", this@PasswordState.isValidated)
+    }
 }
 
 @Serializable
