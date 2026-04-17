@@ -2,10 +2,16 @@ package es.jvbabi.authentikt.core.config
 
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
+import es.jvbabi.authentikt.core.session.Session
+import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 
-class AuthentiktConfiguration<USER>(
+typealias FindNextStepCallback = suspend (session: Session, user: AuthentiktUser<*>) -> BasePlugin<*>
+
+internal class AuthentiktConfiguration<USER>(
     val userSelection: UserSelectionConfig,
     val authentiktUserSource: AuthentiktUserSource<USER>,
+    val findNextStepCallback: FindNextStepCallback,
     val apiPrefix: String,
     val onSuccess: suspend (user: AuthentiktUser<USER>) -> Unit,
+    val installedPlugins: Set<BasePlugin<*>>
 )

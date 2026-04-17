@@ -3,6 +3,8 @@ package es.jvbabi.authentikt.samples
 import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
+import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -30,7 +32,6 @@ fun User.toAuthentiktUser() = object : AuthentiktUser<User>(this) {
     override suspend fun getEmail(): String = email
     override suspend fun getUsername(): String = username
     override suspend fun getDisplayName(): String = displayName
-    override suspend fun checkPassword(password: String): Boolean = this@toAuthentiktUser.password == password
 }
 
 class AppUserSource: AuthentiktUserSource<User> {
@@ -51,15 +52,23 @@ fun Application.module() {
         })
     }
 
+    val passwordPlugin = PasswordPlugin<User> {
+        checkPassword { user, password -> user.password == password }
+    }
+
     installAuthentikt {
         authentiktUserSource = AppUserSource()
+
+        install(passwordPlugin)
 
         userSelection {
             email(withUsername = true)
         }
 
-        userAuthorization {
-            initialValidation()
+        authorization { session, user ->
+            if (!session.has(passwordPlugin)) return@authorization passwordPlugin
+
+            return@authorization DonePlugin
         }
 
         onSuccess { user ->

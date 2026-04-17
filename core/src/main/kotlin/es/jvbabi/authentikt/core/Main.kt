@@ -4,20 +4,21 @@ import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.AuthentiktPluginConfigurationBuilder
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.routes.flow.email.loginEmail
-import es.jvbabi.authentikt.core.routes.flow.password.password
 import es.jvbabi.authentikt.core.routes.flow.start.startFlow
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.sessions
-import io.ktor.server.application.Application
-import io.ktor.server.application.createRouteScopedPlugin
-import io.ktor.server.application.install
-import io.ktor.server.routing.route
-import io.ktor.server.routing.routing
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
 
 internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
 
-fun <USER> Application.installAuthentikt(block: AuthentiktPluginConfigurationBuilder<USER>.() -> Unit) {
-    val builder = AuthentiktPluginConfigurationBuilder<USER>().apply(block)
+fun <USER> Application.installAuthentikt(
+    block: AuthentiktPluginConfigurationBuilder<USER>.() -> Unit
+) {
+
+    val builder = AuthentiktPluginConfigurationBuilder<USER>()
+        .apply(block)
+
     val configuration = builder.build()
     authentiktPluginConfiguration = configuration
 
@@ -41,7 +42,13 @@ fun <USER> Application.installAuthentikt(block: AuthentiktPluginConfigurationBui
 
                     route("/email") { loginEmail(configuration) }
 
-                    route("/password") { password() }
+                    route("/steps/plugins") {
+                        configuration.installedPlugins.forEach { plugin ->
+                            route("/${plugin.namespace}") pluginScopedRoute@{
+                                plugin.installRoutes(this@pluginScopedRoute)
+                            }
+                        }
+                    }
                 }
             }
         }

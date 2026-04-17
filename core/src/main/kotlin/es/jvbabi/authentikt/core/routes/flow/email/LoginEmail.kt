@@ -9,7 +9,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-fun <USER> Route.loginEmail(configuration: AuthentiktConfiguration<USER>) {
+internal fun <USER> Route.loginEmail(configuration: AuthentiktConfiguration<USER>) {
     post {
         val request = call.receive<LoginEmailRequest>()
 
