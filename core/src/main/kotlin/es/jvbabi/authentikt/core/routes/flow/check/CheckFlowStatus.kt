@@ -3,6 +3,7 @@ package es.jvbabi.authentikt.core.routes.flow.check
 import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.UserSelectionEmailConfig
 import es.jvbabi.authentikt.core.config.UserSelectionUsernameConfig
+import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
@@ -10,7 +11,7 @@ import es.jvbabi.authentikt.core.utils.buildGenericMap
 import es.jvbabi.authentikt.core.utils.respondGson
 import io.ktor.server.routing.*
 
-internal fun Route.checkFlowStatus(configuration: AuthentiktConfiguration<*>) {
+internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration<USER>) {
     get {
         val session = call.attributes[SessionKey]
 
@@ -47,7 +48,7 @@ internal fun Route.checkFlowStatus(configuration: AuthentiktConfiguration<*>) {
         val currentStep = session.authenticationSteps.lastOrNull()
 
         val (stepForUser, data) = if (currentStep == null || currentStep.second.isCompleted()) {
-            val nextStep = configuration.findNextStepCallback(session, user)
+            val nextStep = configuration.findNextStepCallback(session, user as AuthentiktUser<USER>)
 
             if (nextStep !in configuration.installedPlugins)
                 throw NotInstalledPluginCalled(nextStep, session)

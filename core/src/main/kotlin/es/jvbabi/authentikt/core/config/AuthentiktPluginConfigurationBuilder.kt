@@ -9,14 +9,14 @@ class AuthentiktPluginConfigurationBuilder<USER> {
     internal var userSelection: UserSelectionConfig? = null
     var authentiktUserSource: AuthentiktUserSource<USER>? = null
     var apiPrefix = ""
-    private var findNextStepCallback: FindNextStepCallback? = null
+    private var findNextStepCallback: FindNextStepCallback<USER>? = null
     private val installedPlugins = mutableSetOf<BasePlugin<*>>(DonePlugin)
 
     fun userSelection(block: UserSelectionConfig.() -> Unit) {
         userSelection = UserSelectionConfig().apply(block)
     }
 
-    fun authorization(block: FindNextStepCallback) {
+    fun authorization(block: FindNextStepCallback<USER>) {
         findNextStepCallback = block
     }
 

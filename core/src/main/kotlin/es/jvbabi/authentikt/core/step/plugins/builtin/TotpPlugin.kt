@@ -91,11 +91,11 @@ class TotpPluginConfigurationBuilder<USER> {
         }
         return TotpPluginConfiguration(
             clock = this.clock,
-            checkUser = this.checkOtp!!,
+            checkUser = this.checkOtp,
             digits = this.digits,
             hmacAlgorithm = HmacAlgorithm.valueOf(this.hmacAlgorithm.name),
             totpDuration = this.totpDuration,
-            getSecret = this.getSecret!!,
+            getSecret = this.getSecret,
         )
     }
 }

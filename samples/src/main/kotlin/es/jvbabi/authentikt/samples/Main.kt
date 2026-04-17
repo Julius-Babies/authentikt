@@ -3,6 +3,7 @@ package es.jvbabi.authentikt.samples
 import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
+import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
@@ -12,6 +13,8 @@ import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import kotlinx.serialization.json.Json
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 data class User(
     val email: String,
@@ -67,20 +70,29 @@ fun Application.module() {
         checkPassword { user, password -> user.password == password }
     }
 
-    val otpPlugin = TotpPlugin<User> {}
+    val totpClock = object : Clock {
+        override fun now(): Instant = Instant.fromEpochSeconds(1776442771)
+    }
+
+    // correct otp = 286133
+    val totpPlugin = TotpPlugin<User> {
+        clock = totpClock
+        getSecret { user -> user.otpSecret!! }
+    }
 
     installAuthentikt {
         authentiktUserSource = AppUserSource()
 
         install(passwordPlugin)
+        install(totpPlugin)
 
         userSelection {
             email(withUsername = true)
         }
 
-        authorization { session, user ->
+        authorization { session: Session, user: AuthentiktUser<User> ->
             if (!session.has(passwordPlugin)) return@authorization passwordPlugin
-            if (!session.has(otpPlugin) && user.user.otpSecret != null) return@authorization otpPlugin
+            if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
 
             return@authorization DonePlugin
         }
