@@ -29,14 +29,14 @@
             transition:fly={{duration: 100, y: 200, opacity: 0.5, easing: quintOut}}
             class="absolute top-0 left-0 w-full h-full backdrop-blur-sm bg-background/75"
     >
+        <Authentikt {authentikt}>
+
+        </Authentikt>
         <div class="absolute top-0 right-0 p-4">
             <Button variant="ghost" size="icon" onclick={authentikt.cancelFlow}>
                 <X/>
             </Button>
         </div>
-        <Authentikt {authentikt}>
-
-        </Authentikt>
     </div>
 {/if}
 

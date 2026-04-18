@@ -10,7 +10,19 @@ export interface AuthentiktConfiguration {
 
 interface FlowState {
     session_id: string;
-    state: any | undefined;
+    step: FlowStepData | null;
+    state: {
+        username: string;
+        displayName: string;
+    } | null;
+}
+
+type FlowStepData = {
+    type: "user_selection",
+    email: {
+        enabled: boolean,
+        with_username: boolean,
+    }
 }
 
 export class Authentikt {
@@ -39,7 +51,7 @@ export class Authentikt {
         const currentUrl = new URL(window.location.href);
         if (currentUrl.searchParams.get("_authentikt_flow_active") === "true") {
             const session_id = currentUrl.searchParams.get("_authentikt_session_id");
-            this._currentFlow.set({session_id: session_id ?? "", state: undefined});
+            this._currentFlow.set({session_id: session_id ?? "", step: null, state: null});
             this.updateState();
         }
     }
@@ -54,7 +66,7 @@ export class Authentikt {
         currentUrl.searchParams.set("_authentikt_flow_active", "true")
         currentUrl.searchParams.set("_authentikt_session_id", session_id);
         await goto(currentUrl.toString(), {replaceState: true, noScroll: true});
-        this._currentFlow.set({session_id, state: undefined});
+        this._currentFlow.set({session_id, step: null, state: null});
 
         await this.updateState();
     }
@@ -77,8 +89,29 @@ export class Authentikt {
         const data = await response.json();
         console.log(data);
         this._currentFlow.update((flow) => (
-            {...flow!, state: data.state}
+            {...flow!, step: data.state}
         ))
+    }
+
+    useEmail = async (email: string): Promise<"success" | "not-existing"> => {
+        const emailUrl = new URL("email", this.sessionUrl);
+        const response = await fetch(emailUrl.toString(), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({email: email}),
+        });
+        const data = await response.json();
+        if (data.type === "user_not_found") return "not-existing";
+        if (data.type === "success") {
+            this._currentFlow.update((flow) => (
+                {...flow!, state: { username: data.username, displayName: data.display_name }}
+            ))
+            await this.updateState();
+            return "success";
+        }
+        throw new Error("Unknown response type");
     }
 }
 

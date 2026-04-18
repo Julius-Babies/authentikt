@@ -10,7 +10,7 @@
 
     const currentFlow = $derived(authentikt.currentFlow);
 
-    let debugPosition = $state({x: 16, y: 16});
+    let debugPosition = $state({x: 300, y: 400});
     let dragOffset = {x: 0, y: 0};
     let dragging = $state(false);
 
