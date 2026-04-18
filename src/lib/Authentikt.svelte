@@ -1,27 +1,24 @@
 <script lang="ts">
-    import type {Authentikt} from "$lib/AuthentiktConfiguration";
+    import type { Authentikt as AuthentiktInstance } from "$lib/AuthentiktConfiguration";
     import AuthentiktDebug from "$lib/AuthentiktDebug.svelte";
-    import Email from "$lib/email/Email.svelte";
+    import { setAuthentiktContext } from "$lib/context";
 
-    let {
-        authentikt,
-    }: {
-        authentikt: Authentikt;
-    } = $props();
+    const props = $props<{
+        instance: AuthentiktInstance;
+        children?: import("svelte").Snippet;
+    }>();
 
-    const currentState = $derived(authentikt.currentFlow)
+    const instance = props.instance;
+    const currentFlow = instance.currentFlow;
+    setAuthentiktContext(instance);
 </script>
 
-{#if authentikt.configuration.authentikt_debug}
-    <AuthentiktDebug {authentikt}/>
+{#if instance.configuration.authentiktDebug}
+    <AuthentiktDebug authentikt={instance} />
 {/if}
 
-{#if $currentState.step}
+{#if $currentFlow}
     <div class="w-full h-full relative">
-        {#if $currentState.step.type === "user_selection"}
-            {#if $currentState.step.email.enabled}
-                <Email {authentikt}/>
-            {/if}
-        {/if}
+        {@render props.children?.()}
     </div>
 {/if}
