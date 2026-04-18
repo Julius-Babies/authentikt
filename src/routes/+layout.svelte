@@ -8,14 +8,16 @@
     import { fly } from "svelte/transition";
     import { quintOut } from "svelte/easing";
     import { PasswordPlugin } from "$lib/plugins/password/PasswordPlugin";
+    import {TotpPlugin} from "$lib/plugins/totp/TotpPlugin";
 
     const { children } = $props();
     const passwordPlugin = new PasswordPlugin();
+    const totpPlugin = new TotpPlugin();
 
     const authentikt = createAuthentikt({
         baseUrl: "http://localhost:8080/authentikt/",
         authentikt_debug: true,
-        plugins: [passwordPlugin]
+        plugins: [passwordPlugin, totpPlugin]
     });
 
     const user = authentikt.user;
@@ -53,8 +55,11 @@
                         </div>
                     {/snippet}
                 </passwordPlugin.renderer>
+
+                <totpPlugin.renderer plugin={totpPlugin} />
             </AuthentiktView>
         </Authentikt>
+
         <div class="absolute top-0 right-0 p-4">
             <Button variant="ghost" size="icon" onclick={authentikt.cancelFlow}>
                 <X />
