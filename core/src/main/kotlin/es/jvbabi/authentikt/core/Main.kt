@@ -4,7 +4,6 @@ import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.AuthentiktPluginConfigurationBuilder
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.routes.flow.email.loginEmail
-import es.jvbabi.authentikt.core.routes.flow.start.startFlow
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.sessions
 import io.ktor.server.application.*
@@ -14,7 +13,7 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
 
 fun <USER> Application.installAuthentikt(
     block: AuthentiktPluginConfigurationBuilder<USER>.() -> Unit
-) {
+): AuthentiktInstance<USER> {
 
     val builder = AuthentiktPluginConfigurationBuilder<USER>()
         .apply(block)
@@ -25,10 +24,6 @@ fun <USER> Application.installAuthentikt(
     routing {
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
-                route("/start") {
-                    startFlow(configuration)
-                }
-
                 route("/{sessionId}") sessionScopedRoute@{
                     createRouteScopedPlugin("Get Session from Path") {
                         onCall { call ->
@@ -53,4 +48,8 @@ fun <USER> Application.installAuthentikt(
             }
         }
     }
+
+    return AuthentiktInstance(
+        configuration = configuration,
+    )
 }

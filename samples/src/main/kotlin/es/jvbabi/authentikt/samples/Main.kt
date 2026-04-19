@@ -1,19 +1,25 @@
 package es.jvbabi.authentikt.samples
 
-import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.AuthentiktUserSource
+import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.Application
-import io.ktor.server.application.install
-import io.ktor.server.netty.EngineMain
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.defaultheaders.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 data class User(
@@ -48,7 +54,7 @@ fun User.toAuthentiktUser() = object : AuthentiktUser<User>(this) {
     override suspend fun getDisplayName(): String = displayName
 }
 
-class AppUserSource: AuthentiktUserSource<User> {
+class AppUserSource : AuthentiktUserSource<User> {
     override suspend fun findUserByEmail(email: String): AuthentiktUser<User>? {
         return users.find { it.email == email }?.toAuthentiktUser()
     }
@@ -66,8 +72,31 @@ fun Application.module() {
         })
     }
 
+    install(CORS) {
+        anyMethod()
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader(HttpHeaders.Cookie)
+        allowHost("localhost:5173")
+    }
+
+    install(DefaultHeaders) {
+        header("Access-Control-Allow-Credentials", "true")
+    }
+
     val passwordPlugin = PasswordPlugin<User> {
         checkPassword { user, password -> user.password == password }
+    }
+
+    val donePlugin = DonePlugin<User> {
+        generateToken { _, user ->
+            return@generateToken "token-for-${user.email}"
+        }
+
+        cookie(
+            name = "SessionToken",
+            validFor = 60.days
+        )
     }
 
     val totpClock = object : Clock {
@@ -80,11 +109,12 @@ fun Application.module() {
         getSecret { user -> user.otpSecret!! }
     }
 
-    installAuthentikt {
+    val instance = installAuthentikt {
         authentiktUserSource = AppUserSource()
 
         install(passwordPlugin)
         install(totpPlugin)
+        install(donePlugin)
 
         userSelection {
             email(withUsername = true)
@@ -94,7 +124,60 @@ fun Application.module() {
             if (!session.has(passwordPlugin)) return@authorization passwordPlugin
             if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
 
-            return@authorization DonePlugin
+            return@authorization donePlugin
+        }
+    }
+
+    install(Authentication) {
+        this.register(object : AuthenticationProvider(object : Config("authentikt") {}) {
+            override suspend fun onAuthenticate(context: AuthenticationContext) {
+                val cookie = context.call.request.cookies["SessionToken"]
+
+                val user = cookie
+                    ?.takeIf { it.startsWith("token-for-") }
+                    ?.removePrefix("token-for-")
+                    ?.let { email -> users.find { it.email == email } }
+
+                if (user != null) {
+                    context.principal(user)
+                } else {
+                    context.challenge("CookieAuth", AuthenticationFailedCause.InvalidCredentials) { challenge, call ->
+                        call.respond(HttpStatusCode.Unauthorized, "Invalid token")
+                        challenge.complete()
+                    }
+                }
+            }
+        })
+    }
+
+    routing {
+        get("/login") {
+            val session = instance.createNewSession()
+            call.respond(buildMap {
+                put("session_id", session.sessionId)
+            })
+        }
+
+        authenticate("authentikt") {
+            get("/api/user/me") {
+                val principal = call.principal<User>()!!
+                call.respond(buildMap {
+                    put("id", principal.email)
+                    put("displayName", principal.displayName)
+                })
+            }
+
+            post("/logout") {
+                call.response.cookies.append(
+                    name = "SessionToken",
+                    value = "",
+                    maxAge = 0,
+                    secure = true,
+                    httpOnly = true,
+                    path = "/"
+                )
+                call.respondText("Logged out")
+            }
         }
     }
 }

@@ -18,26 +18,24 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
 
         if (user == null) {
             buildGenericMap {
-                put("state", buildGenericMap {
-                    put("type", "user_selection")
-                    put("email", buildGenericMap {
-                        val config = configuration.userSelection.emailConfig
-                        val isEnabled = config is UserSelectionEmailConfig.Enabled
-                        put("enabled", isEnabled)
+                put("type", "user_selection")
+                put("email", buildGenericMap {
+                    val config = configuration.userSelection.emailConfig
+                    val isEnabled = config is UserSelectionEmailConfig.Enabled
+                    put("enabled", isEnabled)
 
-                        if (isEnabled) {
-                            put("with_username", config.withUsername)
-                        }
-                    })
+                    if (isEnabled) {
+                        put("with_username", config.withUsername)
+                    }
+                })
 
-                    put("username", buildGenericMap {
-                        val config = configuration.userSelection.usernameConfig
-                        val isEnabled = config is UserSelectionUsernameConfig.Enabled
-                        put("enabled", isEnabled)
-                        if (config is UserSelectionUsernameConfig.Enabled) {
-                            put("with_email", config.withEmail)
-                        }
-                    })
+                put("username", buildGenericMap {
+                    val config = configuration.userSelection.usernameConfig
+                    val isEnabled = config is UserSelectionUsernameConfig.Enabled
+                    put("enabled", isEnabled)
+                    if (config is UserSelectionUsernameConfig.Enabled) {
+                        put("with_email", config.withEmail)
+                    }
                 })
             }.let { call.respondGson(it) }
 

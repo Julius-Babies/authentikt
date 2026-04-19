@@ -2,7 +2,6 @@ package es.jvbabi.authentikt.core.config
 
 import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 
 class AuthentiktPluginConfigurationBuilder<USER> {
 
@@ -10,7 +9,7 @@ class AuthentiktPluginConfigurationBuilder<USER> {
     var authentiktUserSource: AuthentiktUserSource<USER>? = null
     var apiPrefix = ""
     private var findNextStepCallback: FindNextStepCallback<USER>? = null
-    private val installedPlugins = mutableSetOf<BasePlugin<*>>(DonePlugin)
+    private val installedPlugins = mutableSetOf<BasePlugin<*>>()
 
     fun userSelection(block: UserSelectionConfig.() -> Unit) {
         userSelection = UserSelectionConfig().apply(block)
