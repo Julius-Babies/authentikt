@@ -127,3 +127,13 @@
 		@apply font-sans;
 	}
 }
+
+
+body {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	justify-content: start;
+	min-width: 100dvw;
+	min-height: 100dvh;
+}

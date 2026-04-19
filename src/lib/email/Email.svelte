@@ -7,7 +7,7 @@
         authentikt: Authentikt,
     } = $props();
 
-    let email = $state("");
+    let email = $state("admin@acme.com");
     let result: null | "user_not_existing" = $state(null);
 
     async function submit() {

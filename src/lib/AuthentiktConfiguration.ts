@@ -1,6 +1,5 @@
-import { get, readonly, type Readable, writable, type Writable } from "svelte/store";
-import type { User } from "$lib/User";
-import type { AuthentiktPlugin } from "$lib/plugins/AuthentiktPlugin";
+import {get, type Readable, readonly, writable, type Writable} from "svelte/store";
+import type {AuthentiktPlugin} from "$lib/plugins/AuthentiktPlugin";
 
 export interface AuthentiktConfiguration {
     baseUrl: string;
@@ -40,9 +39,6 @@ export class Authentikt {
         installedPlugins: AuthentiktPlugin[];
     };
 
-    private _user: Writable<User | null> = writable(null);
-    user: Readable<User | null> = readonly(this._user);
-
     private _currentFlow: Writable<FlowState | null> = writable(null);
     currentFlow: Readable<FlowState | null> = readonly(this._currentFlow);
 
@@ -68,7 +64,7 @@ export class Authentikt {
     }
 
     startLoginFlow = async () => {
-        const startFlowUrl = new URL("flow/start", this.configuration.baseUrl);
+        const startFlowUrl = new URL("/login", this.configuration.baseUrl);
         const response = await fetch(startFlowUrl.toString());
         const data = await response.json();
         const session_id = data.session_id;

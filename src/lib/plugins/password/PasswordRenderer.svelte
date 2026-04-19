@@ -14,7 +14,7 @@
     const authentikt = useAuthentiktContext();
     const currentFlow = authentikt.currentFlow;
 
-    let password = $state("");
+    let password = $state("password");
     let status = $state<PasswordStatus>("ready");
 
     const isActive = $derived(
