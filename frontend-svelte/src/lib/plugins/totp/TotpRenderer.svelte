@@ -14,7 +14,7 @@
     const authentikt = useAuthentiktContext();
     const currentFlow = authentikt.currentFlow;
 
-    let totp = $state("");
+    let totp = $state("286133");
     let status = $state<TotpStatus>("ready");
 
     const isActive = $derived(
