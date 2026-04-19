@@ -1,12 +1,12 @@
 package es.jvbabi.authentikt.samples
 
 import es.jvbabi.authentikt.core.AuthentiktUser
-import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
+import es.jvbabi.authentikt.core.userselection.plugins.builtin.EmailUserSelectionPlugin
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -54,12 +54,6 @@ fun User.toAuthentiktUser() = object : AuthentiktUser<User>(this) {
     override suspend fun getDisplayName(): String = displayName
 }
 
-class AppUserSource : AuthentiktUserSource<User> {
-    override suspend fun findUserByEmail(email: String): AuthentiktUser<User>? {
-        return users.find { it.email == email }?.toAuthentiktUser()
-    }
-}
-
 fun main(args: Array<String>) {
     EngineMain.main(args)
 }
@@ -88,6 +82,11 @@ fun Application.module() {
         checkPassword { user, password -> user.password == password }
     }
 
+    val emailUserSelectionPlugin = EmailUserSelectionPlugin<User> {
+        withUsername = true
+        findUserByEmail { email -> users.find { it.email == email || it.username == email }?.toAuthentiktUser() }
+    }
+
     val donePlugin = DonePlugin<User> {
         generateToken { _, user ->
             return@generateToken "token-for-${user.email}"
@@ -110,15 +109,11 @@ fun Application.module() {
     }
 
     val instance = installAuthentikt {
-        authentiktUserSource = AppUserSource()
+        install(emailUserSelectionPlugin)
 
         install(passwordPlugin)
         install(totpPlugin)
         install(donePlugin)
-
-        userSelection {
-            email(withUsername = true)
-        }
 
         authorization { session: Session<*>, user: AuthentiktUser<User> ->
             if (!session.has(passwordPlugin)) return@authorization passwordPlugin

@@ -1,8 +1,6 @@
 package es.jvbabi.authentikt.core.routes.flow.check
 
 import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
-import es.jvbabi.authentikt.core.config.UserSelectionEmailConfig
-import es.jvbabi.authentikt.core.config.UserSelectionUsernameConfig
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
@@ -17,27 +15,15 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
         val user = session.identifiedUser
 
         if (user == null) {
-            buildGenericMap {
+            call.respondGson(buildGenericMap {
                 put("type", "user_selection")
-                put("email", buildGenericMap {
-                    val config = configuration.userSelection.emailConfig
-                    val isEnabled = config is UserSelectionEmailConfig.Enabled
-                    put("enabled", isEnabled)
-
-                    if (isEnabled) {
-                        put("with_username", config.withUsername)
+                put("plugins", configuration.installedUserSelectionPlugins.map { plugin ->
+                    buildGenericMap {
+                        put("namespace", plugin.namespace)
+                        put("payload", plugin.createClientState())
                     }
                 })
-
-                put("username", buildGenericMap {
-                    val config = configuration.userSelection.usernameConfig
-                    val isEnabled = config is UserSelectionUsernameConfig.Enabled
-                    put("enabled", isEnabled)
-                    if (config is UserSelectionUsernameConfig.Enabled) {
-                        put("with_email", config.withEmail)
-                    }
-                })
-            }.let { call.respondGson(it) }
+            })
 
             return@get
         }

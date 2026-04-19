@@ -3,7 +3,6 @@ package es.jvbabi.authentikt.core
 import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.config.AuthentiktPluginConfigurationBuilder
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
-import es.jvbabi.authentikt.core.routes.flow.email.loginEmail
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.sessions
 import io.ktor.server.application.*
@@ -35,7 +34,13 @@ fun <USER> Application.installAuthentikt(
 
                     route("/check") { checkFlowStatus(configuration) }
 
-                    route("/email") { loginEmail(configuration) }
+                    route("/user-selection/plugins") {
+                        configuration.installedUserSelectionPlugins.forEach { plugin ->
+                            route("/${plugin.namespace}") pluginScopedRoute@{
+                                plugin.installRoutes(this@pluginScopedRoute)
+                            }
+                        }
+                    }
 
                     route("/steps/plugins") {
                         configuration.installedPlugins.forEach { plugin ->

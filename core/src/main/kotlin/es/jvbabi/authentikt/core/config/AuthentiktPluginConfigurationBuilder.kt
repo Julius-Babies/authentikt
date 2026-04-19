@@ -1,19 +1,14 @@
 package es.jvbabi.authentikt.core.config
 
-import es.jvbabi.authentikt.core.AuthentiktUserSource
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
+import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
 
 class AuthentiktPluginConfigurationBuilder<USER> {
 
-    internal var userSelection: UserSelectionConfig? = null
-    var authentiktUserSource: AuthentiktUserSource<USER>? = null
     var apiPrefix = ""
     private var findNextStepCallback: FindNextStepCallback<USER>? = null
     private val installedPlugins = mutableSetOf<BasePlugin<*>>()
-
-    fun userSelection(block: UserSelectionConfig.() -> Unit) {
-        userSelection = UserSelectionConfig().apply(block)
-    }
+    private val installedUserSelectionPlugins = mutableSetOf<BaseUserSelectionPlugin<USER>>()
 
     fun authorization(block: FindNextStepCallback<USER>) {
         findNextStepCallback = block
@@ -23,17 +18,19 @@ class AuthentiktPluginConfigurationBuilder<USER> {
         installedPlugins.add(plugin)
     }
 
+    fun install(plugin: BaseUserSelectionPlugin<USER>) {
+        installedUserSelectionPlugins.add(plugin)
+    }
+
     internal fun build(): AuthentiktConfiguration<USER> {
-        require(userSelection != null && userSelection!!.validate()) { "UserSelection must be configured" }
-        requireNotNull(authentiktUserSource) { "AuthentiktUserSource must be configured" }
+        require(installedUserSelectionPlugins.isNotEmpty()) { "At least one user selection plugin must be installed" }
         requireNotNull(this.findNextStepCallback) { "findNextStepCallback must be configured" }
 
         return AuthentiktConfiguration(
-            userSelection = userSelection!!,
-            authentiktUserSource = authentiktUserSource!!,
             findNextStepCallback = this.findNextStepCallback!!,
             apiPrefix = apiPrefix,
-            installedPlugins = installedPlugins
+            installedPlugins = installedPlugins,
+            installedUserSelectionPlugins = installedUserSelectionPlugins,
         )
     }
 }
