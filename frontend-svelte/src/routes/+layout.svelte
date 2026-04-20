@@ -112,7 +112,54 @@
                         {/snippet}
                     </passwordPlugin.renderer>
 
-                    <totpPlugin.renderer plugin={totpPlugin} />
+                    <totpPlugin.renderer plugin={totpPlugin}>
+                        {#snippet children(totp, status, submit, setTotp)}
+                            <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4 text-center">
+                                <h2 class="text-lg font-semibold">Verify your identity</h2>
+                                <p class="text-sm text-gray-600">Enter the 6-digit code from your authenticator app.</p>
+                                
+                                <div class="flex justify-center gap-2">
+                                    {#each Array(6) as _, i}
+                                        <input
+                                            class="w-10 h-12 text-center text-xl font-bold border rounded focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                            type="text"
+                                            inputmode="numeric"
+                                            pattern="[0-9]*"
+                                            maxlength="1"
+                                            value={totp[i] || ""}
+                                            oninput={(e) => {
+                                                const val = e.currentTarget.value.replace(/[^0-9]/g, "");
+                                                const newTotp = totp.split("");
+                                                newTotp[i] = val.slice(-1);
+                                                setTotp(newTotp.join(""));
+                                                
+                                                // Auto-focus next
+                                                if (val && i < 5) {
+                                                    (e.currentTarget.nextElementSibling as HTMLInputElement)?.focus();
+                                                }
+                                            }}
+                                            onkeydown={(e) => {
+                                                if (e.key === "Backspace" && !totp[i] && i > 0) {
+                                                    (e.currentTarget.previousElementSibling as HTMLInputElement)?.focus();
+                                                }
+                                            }}
+                                        />
+                                    {/each}
+                                </div>
+
+                                {#if status === "totp_incorrect"}
+                                    <p class="text-sm text-red-600">Invalid code. Please try again.</p>
+                                {/if}
+
+                                <Button 
+                                    onclick={submit} 
+                                    disabled={status === "loading" || totp.length !== 6}
+                                >
+                                    {status === "loading" ? "Verifying..." : "Verify"}
+                                </Button>
+                            </div>
+                        {/snippet}
+                    </totpPlugin.renderer>
                 </AuthentiktView>
             </Authentikt>
 
