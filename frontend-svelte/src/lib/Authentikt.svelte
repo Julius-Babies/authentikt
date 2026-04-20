@@ -8,13 +8,12 @@
         children?: import("svelte").Snippet;
     }>();
 
-    const instance = props.instance;
-    const currentFlow = instance.currentFlow;
-    setAuthentiktContext(instance);
+    setAuthentiktContext(props.instance);
+    const currentFlow = $derived(props.instance.currentFlow);
 </script>
 
-{#if instance.configuration.authentiktDebug}
-    <AuthentiktDebug authentikt={instance} />
+{#if props.instance.configuration.authentiktDebug}
+    <AuthentiktDebug authentikt={props.instance} />
 {/if}
 
 {#if $currentFlow}

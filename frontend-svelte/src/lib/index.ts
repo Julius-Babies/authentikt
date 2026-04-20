@@ -13,4 +13,12 @@ export { AuthentiktPlugin } from "./plugins/AuthentiktPlugin";
 export { PasswordPlugin } from "./plugins/password/PasswordPlugin";
 export type { PasswordStatus, PasswordSnippet } from "./plugins/password/types";
 
-export type { User } from "./User";
+export { AuthentiktUserSelectionPlugin } from "./user-selection/plugins/AuthentiktUserSelectionPlugin";
+export { EmailUserSelectionPlugin } from "./user-selection/plugins/email/EmailUserSelectionPlugin";
+export type {
+    EmailUserSelectionStatus,
+    EmailUserSelectionSnippet,
+    EmailUserSelectionPayload,
+} from "./user-selection/plugins/email/types";
+
+export type { User } from "./user";

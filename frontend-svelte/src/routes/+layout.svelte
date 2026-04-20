@@ -10,6 +10,7 @@
     import {PasswordPlugin} from "$lib/plugins/password/PasswordPlugin";
     import {TotpPlugin} from "$lib/plugins/totp/TotpPlugin";
     import {DonePlugin} from "$lib/plugins/done/DonePlugin";
+    import {EmailUserSelectionPlugin} from "$lib/user-selection/plugins/email/EmailUserSelectionPlugin";
     import {currentUser} from "$lib/user";
     import {onMount} from "svelte";
     import update_user from "./update_user";
@@ -18,11 +19,13 @@
     const passwordPlugin = new PasswordPlugin();
     const totpPlugin = new TotpPlugin();
     const donePlugin = new DonePlugin(update_user);
+    const emailUserSelectionPlugin = new EmailUserSelectionPlugin();
 
     const authentikt = createAuthentikt({
         baseUrl: "http://localhost:8080/authentikt/",
         authentikt_debug: true,
-        plugins: [passwordPlugin, totpPlugin, donePlugin]
+        plugins: [passwordPlugin, totpPlugin, donePlugin],
+        userSelectionPlugins: [emailUserSelectionPlugin],
     });
 
     const currentFlow = authentikt.currentFlow;
@@ -67,6 +70,27 @@
         >
             <Authentikt instance={authentikt}>
                 <AuthentiktView>
+                    <emailUserSelectionPlugin.renderer plugin={emailUserSelectionPlugin}>
+                        {#snippet children(email, status, submit, setEmail)}
+                            <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4">
+                                <h2 class="text-lg font-semibold">Sign in</h2>
+                                <input
+                                        class="rounded border px-3 py-2"
+                                        type="email"
+                                        placeholder="you@company.com"
+                                        value={email}
+                                        oninput={(event) => setEmail((event.currentTarget as HTMLInputElement).value)}
+                                />
+                                {#if status === "user_not_existing"}
+                                    <p class="text-sm text-red-600">No user found for this email.</p>
+                                {/if}
+                                <Button onclick={submit} disabled={status === "loading"}>
+                                    {status === "loading" ? "Checking..." : "Continue"}
+                                </Button>
+                            </div>
+                        {/snippet}
+                    </emailUserSelectionPlugin.renderer>
+
                     <passwordPlugin.renderer plugin={passwordPlugin}>
                         {#snippet children(password, status, submit, setPassword)}
                             <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4">

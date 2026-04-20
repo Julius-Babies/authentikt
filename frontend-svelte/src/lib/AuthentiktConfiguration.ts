@@ -1,10 +1,12 @@
 import {get, type Readable, readonly, writable, type Writable} from "svelte/store";
 import type {AuthentiktPlugin} from "$lib/plugins/AuthentiktPlugin";
+import type {AuthentiktUserSelectionPlugin} from "$lib/user-selection/plugins/AuthentiktUserSelectionPlugin";
 
 export interface AuthentiktConfiguration {
     baseUrl: string;
     authentikt_debug: boolean | undefined;
     plugins: AuthentiktPlugin[] | undefined;
+    userSelectionPlugins?: AuthentiktUserSelectionPlugin[];
 }
 
 export interface FlowUserState {
@@ -20,14 +22,14 @@ export interface FlowState {
 
 export type FlowStepData = {
     type: "user_selection",
-    email: {
-        enabled: boolean,
-        with_username: boolean,
-    }
+    plugins: {
+        namespace: string,
+        payload?: Record<string, unknown>,
+    }[]
 } | {
     type: "step";
     namespace: string;
-    state?: Record<string, unknown>;
+    payload?: Record<string, unknown>;
 } | {
     type: "finished";
 }
@@ -37,6 +39,7 @@ export class Authentikt {
         baseUrl: URL,
         authentiktDebug: boolean,
         installedPlugins: AuthentiktPlugin[];
+        installedUserSelectionPlugins: AuthentiktUserSelectionPlugin[];
     };
 
     private _currentFlow: Writable<FlowState | null> = writable(null);
@@ -47,9 +50,14 @@ export class Authentikt {
             baseUrl: new URL(configuration.baseUrl),
             authentiktDebug: configuration.authentikt_debug ?? false,
             installedPlugins: configuration.plugins ?? [],
+            installedUserSelectionPlugins: configuration.userSelectionPlugins ?? [],
         };
 
         this.configuration.installedPlugins.forEach(plugin => {
+            plugin.authentikt = this
+        })
+
+        this.configuration.installedUserSelectionPlugins.forEach(plugin => {
             plugin.authentikt = this
         })
 
@@ -95,34 +103,28 @@ export class Authentikt {
 
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
-        const data = await response.json();
+        const data: FlowStepData = await response.json();
 
         if (data.type === "step" && !this.configuration.installedPlugins.map(p => p.namespace).includes(data.namespace))
             throw new Error(`No plugin found for step with namespace ${data.namespace}`);
 
+        if (data.type === "user_selection") {
+            const installedNamespaces = this.configuration.installedUserSelectionPlugins.map(p => p.namespace);
+            data.plugins.forEach((plugin) => {
+                if (!installedNamespaces.includes(plugin.namespace)) {
+                    throw new Error(`No user selection plugin found for namespace ${plugin.namespace}`);
+                }
+            });
+        }
+
         this._currentFlow.update((flow) => ({ ...flow!, step: data }));
     }
 
-    useEmail = async (email: string): Promise<"success" | "not-existing"> => {
-        const emailUrl = new URL("email", this.sessionUrl);
-        const response = await fetch(emailUrl.toString(), {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({email: email}),
+    setFlowUserState = (state: FlowUserState | null): void => {
+        this._currentFlow.update((flow) => {
+            if (!flow) return flow;
+            return { ...flow, state };
         });
-        const data = await response.json();
-        if (data.type === "user_not_found") return "not-existing";
-        if (data.type === "success") {
-            this._currentFlow.update((flow) => ({
-                ...flow!,
-                state: { username: data.username, displayName: data.display_name }
-            }));
-            await this.updateState();
-            return "success";
-        }
-        throw new Error("Unknown response type");
     }
 
     private currentUrl(): URL {
