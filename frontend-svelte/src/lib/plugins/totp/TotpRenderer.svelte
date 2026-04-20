@@ -1,54 +1,44 @@
 <script lang="ts">
-    import {useAuthentiktContext} from "$lib/context";
-    import type {TotpPlugin} from "$lib/plugins/totp/TotpPlugin";
-    import type {TotpSnippet, TotpStatus} from "$lib/plugins/totp/types";
+    import { useAuthentiktContext } from "$lib/context";
+    import { TotpPlugin } from "./TotpPlugin.svelte";
+    import type { TotpPluginInstance, TotpSnippet } from "./types";
 
-    let {
-        plugin,
-        children
-    }: {
-        plugin: TotpPlugin;
-        children?: TotpSnippet;
-    } = $props();
+    let { children }: { children?: TotpSnippet } = $props();
 
     const authentikt = useAuthentiktContext();
-    const currentFlow = authentikt.currentFlow;
+    const namespace = "authentikt-builtin/totp";
 
-    let totp = $state("286133");
-    let status = $state<TotpStatus>("ready");
-
-    const isActive = $derived(
-        $currentFlow?.step?.type === "step" &&
-        $currentFlow.step.namespace === plugin.namespace
+    const plugin = authentikt.linkStepPlugin<TotpPluginInstance>(
+        namespace,
+        TotpRenderer,
+        () => new TotpPlugin(authentikt, namespace)
     );
-
-    async function submit() {
-        status = "loading";
-        try {
-            const result = await plugin.useTotp(totp);
-            if (result === "wrong") status = "totp_incorrect";
-        } catch(e) {
-            console.error(e);
-            status = "error";
-        }
-    }
-
-    function updateTotp(value: string) {
-        totp = value;
-    }
 </script>
 
-{#if isActive}
+<script lang="ts" module>
+    import TotpRenderer from "./TotpRenderer.svelte";
+</script>
+
+{#if plugin.isActive}
     {#if children}
-        {@render children(totp, status, submit, updateTotp)}
+        {@render children(plugin)}
     {:else}
         <div class="flex flex-col gap-2">
-            <input type="text" placeholder="TOTP" bind:value={totp} />
-            {#if status === "totp_incorrect"}
-                <span class="text-red-400">TOTP incorrect</span>
+            <input 
+                type="text" 
+                placeholder="TOTP Code" 
+                bind:value={plugin.totp} 
+                class="border p-2 rounded"
+            />
+            {#if plugin.status === "totp_incorrect"}
+                <span class="text-red-400 text-sm">TOTP incorrect</span>
             {/if}
-            <button onclick={submit} disabled={status === "loading"}>
-                {status === "loading" ? "Checking..." : "Continue"}
+            <button 
+                onclick={plugin.submit} 
+                disabled={plugin.status === "loading"}
+                class="bg-blue-600 text-white p-2 rounded disabled:opacity-50"
+            >
+                {plugin.status === "loading" ? "Checking..." : "Continue"}
             </button>
         </div>
     {/if}

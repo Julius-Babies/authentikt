@@ -29,13 +29,19 @@ The `samples` module is the reference application.
 - `samples/src/main/resources/application.yaml` configures the Ktor module and server port.
 
 ## Frontend Svelte Module
-The `frontend-svelte` module is a Svelte 5 component library with a local showcase.
+The `frontend-svelte` module is a Svelte 5 component library following a headless, rune-based architecture.
 
-- `frontend-svelte/src/lib/AuthentiktConfiguration.ts` holds client flow state and API wiring.
-- `frontend-svelte/src/lib/AuthentiktView.svelte` renders user-selection and step plugins based on server flow status.
-- `frontend-svelte/src/lib/plugins/` contains step plugin classes and renderers.
-- `frontend-svelte/src/lib/user-selection/plugins/` contains user-selection plugin classes and renderers.
-- `frontend-svelte/src/routes/+layout.svelte` wires the showcase app.
+- `frontend-svelte/src/lib/Authentikt.svelte` - Main context provider for the auth flow.
+- `frontend-svelte/src/lib/AuthentiktConfiguration.ts` - Core flow engine using Svelte 5 runes (`$state`).
+- `frontend-svelte/src/lib/AuthentiktView.svelte` - Orchestrator that renders the active plugin based on the server-side state.
+- `frontend-svelte/src/lib/plugins/` - Headless step plugins. Components here register themselves with the context and handle API interaction.
+- `frontend-svelte/src/lib/user-selection/plugins/` - Headless user-selection plugins.
+- `frontend-svelte/src/routes/+layout.svelte` - Showcase app demonstrating how to use plugins with custom snippets for deep UI customization.
+
+### Architectural Concepts
+1. **Headless:** Logic is separated from UI. Plugins provide the state and actions, while users can provide their own rendering via Svelte snippets.
+2. **Registry:** Plugins register their renderers for specific namespaces upon mounting.
+3. **Runes:** State management is fully reactive using Svelte 5 runes, removing the need for legacy stores.
 
 ## Main Flow
 1. `Application.installAuthentikt { ... }` configures the auth pipeline and mounts routes under `/authentikt`.
@@ -54,6 +60,9 @@ The `frontend-svelte` module is a Svelte 5 component library with a local showca
 - Keep library code in `core` and example wiring in `samples`.
 - When adding new auth steps or route handlers, update the sample if behavior should be demonstrated end-to-end.
 - Keep frontend-svelte aligned with backend flow contracts when response payloads or routes change.
+### frontend
+- For Web development, use bun instead of node/npm
+- Don't add the extension like `*.ts` or `*.js` when importing modules in Svelte files. Bun will resolve them correctly. For files ending in `.svelte`, the extension is required to distinguish them from TypeScript modules.
 
 ## Svelte 5 Hints
 - Use runes-style APIs (`$state`, `$derived`, `$effect`, `$props`) consistently in `.svelte` files.

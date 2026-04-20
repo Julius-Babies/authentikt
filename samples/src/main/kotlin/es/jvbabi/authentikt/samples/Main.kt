@@ -82,7 +82,7 @@ fun Application.module() {
         checkPassword { user, password -> user.password == password }
     }
 
-    val emailUserSelectionPlugin = EmailUserSelectionPlugin<User> {
+    val emailUserSelectionPlugin = EmailUserSelectionPlugin {
         withUsername = true
         findUserByEmail { email -> users.find { it.email == email || it.username == email }?.toAuthentiktUser() }
     }

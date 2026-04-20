@@ -1,54 +1,44 @@
 <script lang="ts">
     import { useAuthentiktContext } from "$lib/context";
-    import type { PasswordPlugin } from "$lib/plugins/password/PasswordPlugin";
-    import type { PasswordSnippet, PasswordStatus } from "$lib/plugins/password/types";
+    import { PasswordPlugin } from "./PasswordPlugin.svelte";
+    import type { PasswordPluginInstance, PasswordSnippet } from "./types";
 
-    let {
-        plugin,
-        children
-    }: {
-        plugin: PasswordPlugin;
-        children?: PasswordSnippet;
-    } = $props();
+    let { children }: { children?: PasswordSnippet } = $props();
 
     const authentikt = useAuthentiktContext();
-    const currentFlow = authentikt.currentFlow;
+    const namespace = "authentikt-builtin/password";
 
-    let password = $state("password");
-    let status = $state<PasswordStatus>("ready");
-
-    const isActive = $derived(
-        $currentFlow?.step?.type === "step" &&
-        $currentFlow.step.namespace === "authentikt-builtin/password"
+    const plugin = authentikt.linkStepPlugin<PasswordPluginInstance>(
+        namespace,
+        PasswordRenderer,
+        () => new PasswordPlugin(authentikt, namespace)
     );
-
-    async function submit() {
-        status = "loading";
-        try {
-            const result = await plugin.login(password);
-            if (result === "wrong") status = "password_incorrect";
-        } catch(e) {
-            console.error(e);
-            status = "error";
-        }
-    }
-
-    function setPassword(value: string) {
-        password = value;
-    }
 </script>
 
-{#if isActive}
+<script lang="ts" module>
+    import PasswordRenderer from "./PasswordRenderer.svelte";
+</script>
+
+{#if plugin.isActive}
     {#if children}
-        {@render children(password, status, submit, setPassword)}
+        {@render children(plugin)}
     {:else}
         <div class="flex flex-col gap-2">
-            <input type="password" placeholder="Password" bind:value={password} />
-            {#if status === "password_incorrect"}
-                <span class="text-red-400">Password incorrect</span>
+            <input 
+                type="password" 
+                placeholder="Password" 
+                bind:value={plugin.password}
+                class="border p-2 rounded" 
+            />
+            {#if plugin.status === "password_incorrect"}
+                <span class="text-red-400 text-sm">Password incorrect</span>
             {/if}
-            <button onclick={submit} disabled={status === "loading"}>
-                {status === "loading" ? "Checking..." : "Continue"}
+            <button 
+                onclick={plugin.submit} 
+                disabled={plugin.status === "loading"}
+                class="bg-blue-600 text-white p-2 rounded disabled:opacity-50"
+            >
+                {plugin.status === "loading" ? "Checking..." : "Continue"}
             </button>
         </div>
     {/if}

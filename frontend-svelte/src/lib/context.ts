@@ -1,5 +1,5 @@
 import { getContext, setContext } from "svelte";
-import type { Authentikt } from "$lib/AuthentiktConfiguration";
+import type { Authentikt } from "$lib/AuthentiktConfiguration.svelte";
 
 const AUTHENTIKT_CONTEXT = Symbol("authentikt-context");
 

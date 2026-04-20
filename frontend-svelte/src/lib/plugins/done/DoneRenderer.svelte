@@ -1,29 +1,25 @@
 <script lang="ts">
-    import {useAuthentiktContext} from "$lib/context";
-    import type {DoneSnippet} from "$lib/plugins/done/types";
-    import type {DonePlugin} from "$lib/plugins/done/DonePlugin";
-
-    let {
-        plugin,
-        children,
-    }: {
-        plugin: DonePlugin,
-        children?: DoneSnippet,
-    } = $props();
+    import { DonePlugin } from "./DonePlugin.svelte";
+    import { useAuthentiktContext } from "$lib/context";
 
     const authentikt = useAuthentiktContext();
-    const currentFlow = authentikt.currentFlow;
+    const namespace = "authentikt-builtin/done";
 
-    const isActive = $derived(
-        $currentFlow?.step?.type === "step" &&
-        $currentFlow.step.namespace === "authentikt-builtin/done"
-    );
+    const plugin = authentikt.linkStepPlugin(namespace, DoneRenderer, () => new DonePlugin(authentikt, namespace));
 
     $effect(() => {
-        if (!isActive) return;
-
-        plugin.saveToken()
-    })
+        if (!plugin.isActive) return;
+        void plugin.complete();
+    });
 </script>
 
-all done
+<script lang="ts" module>
+    import DoneRenderer from "./DoneRenderer.svelte";
+</script>
+
+{#if plugin.isActive}
+    <div class="flex flex-col items-center gap-4">
+        <span class="text-green-600 font-bold">Successfully authenticated!</span>
+        <p>You are being redirected...</p>
+    </div>
+{/if}

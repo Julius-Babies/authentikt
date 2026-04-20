@@ -1,31 +1,21 @@
 <script lang="ts">
-    import type { Authentikt as AuthentiktInstance } from "$lib/AuthentiktConfiguration";
-    import AuthentiktDebug from "$lib/AuthentiktDebug.svelte";
-    import { setAuthentiktContext } from "$lib/context";
+    import { setAuthentiktContext } from "./context";
+    import { Authentikt, type AuthentiktConfiguration } from "./AuthentiktConfiguration.svelte";
+    import type { Snippet } from "svelte";
 
-    const props = $props<{
-        instance: AuthentiktInstance;
-        children?: import("svelte").Snippet;
-    }>();
+    let {
+        baseUrl,
+        authentikt_debug = false,
+        children
+    }: AuthentiktConfiguration & {
+        children?: Snippet;
+    } = $props();
 
-    // Set context immediately during component initialization
-    setAuthentiktContext(props.instance);
-
-    const currentFlow = $derived(props.instance.currentFlow);
+    const instance = new Authentikt({ 
+        get baseUrl() { return baseUrl }, 
+        get authentikt_debug() { return authentikt_debug } 
+    });
+    setAuthentiktContext(instance);
 </script>
 
-{#if props.instance.configuration.authentiktDebug}
-    <AuthentiktDebug authentikt={props.instance} />
-{/if}
-
-{#if $currentFlow}
-    <div class="w-full h-full relative">
-        {@render props.children?.()}
-    </div>
-{/if}
-
-{#if $currentFlow}
-    <div class="w-full h-full relative">
-        {@render props.children?.()}
-    </div>
-{/if}
+{@render children?.()}

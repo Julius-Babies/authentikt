@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Authentikt} from "$lib/AuthentiktConfiguration";
+    import type {Authentikt} from "$lib/AuthentiktConfiguration.svelte";
     import {JsonView} from "@zerodevx/svelte-json-view";
 
     let {
@@ -74,6 +74,6 @@
 
     <div class="flex flex-col p-2">
         <h2>State</h2>
-        <JsonView json={$currentFlow}/>
+        <JsonView json={currentFlow}/>
     </div>
 </div>

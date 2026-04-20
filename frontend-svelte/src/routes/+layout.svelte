@@ -1,38 +1,25 @@
 <script lang="ts">
     import "./layout.css";
-    import {createAuthentikt} from "$lib/AuthentiktConfiguration";
-    import AuthentiktView from "$lib/AuthentiktView.svelte";
     import Authentikt from "$lib/Authentikt.svelte";
+    import EmailUserSelectionRenderer from "$lib/user-selection/plugins/email/EmailUserSelectionRenderer.svelte";
+    import PasswordRenderer from "$lib/plugins/password/PasswordRenderer.svelte";
+    import TotpRenderer from "$lib/plugins/totp/TotpRenderer.svelte";
+    import DoneRenderer from "$lib/plugins/done/DoneRenderer.svelte";
+    import {useAuthentiktContext} from "$lib/context";
+
     import {Loader, X} from "@lucide/svelte";
     import {Button} from "$lib/components/ui/button";
     import {fade, fly} from "svelte/transition";
-    import {quintOut} from "svelte/easing";
-    import {PasswordPlugin} from "$lib/plugins/password/PasswordPlugin";
-    import {TotpPlugin} from "$lib/plugins/totp/TotpPlugin";
-    import {DonePlugin} from "$lib/plugins/done/DonePlugin";
-    import {EmailUserSelectionPlugin} from "$lib/user-selection/plugins/email/EmailUserSelectionPlugin";
+    import {quadOut} from "svelte/easing";
     import {currentUser} from "$lib/user";
     import {onMount} from "svelte";
     import update_user from "./update_user";
 
     const { children } = $props();
-    const passwordPlugin = new PasswordPlugin();
-    const totpPlugin = new TotpPlugin();
-    const donePlugin = new DonePlugin(update_user);
-    const emailUserSelectionPlugin = new EmailUserSelectionPlugin();
-
-    const authentikt = createAuthentikt({
-        baseUrl: "http://localhost:8080/authentikt/",
-        authentikt_debug: true,
-        plugins: [passwordPlugin, totpPlugin, donePlugin],
-        userSelectionPlugins: [emailUserSelectionPlugin],
-    });
-
-    const currentFlow = authentikt.currentFlow;
 
     onMount(() => {
         update_user();
-    })
+    });
 
     async function logout() {
         await fetch("http://localhost:8080/logout", {
@@ -44,133 +31,82 @@
 </script>
 
 <div class="min-w-screen min-h-screen">
-    {#if $currentUser === null}
-        <div
-                transition:fade={{ duration: 50 }}
-                class="absolute top-0 left-0 flex w-full h-full z-20 items-center justify-center bg-background/75"
-        >
-            <div class="animate-spin w-8 h-8">
-                <Loader class="w-full h-full" />
+    <Authentikt 
+        baseUrl="http://localhost:8080/authentikt/" 
+        authentikt_debug={true}
+    >
+        {@const authentikt = useAuthentiktContext()}
+
+        {#if $currentUser === null}
+            <div
+                    transition:fade={{ duration: 50 }}
+                    class="absolute top-0 left-0 flex w-full h-full z-20 items-center justify-center bg-background/75"
+            >
+                <div class="animate-spin w-8 h-8">
+                    <Loader class="w-full h-full" />
+                </div>
             </div>
-        </div>
-    {/if}
+        {/if}
 
-    {#if $currentUser === "anonymous" && $currentUser !== null}
-        <button onclick={authentikt.startLoginFlow}>login</button>
-    {/if}
+        {#if $currentUser === "anonymous" && $currentUser !== null}
+            <div class="p-4">
+                <Button onclick={authentikt.startLoginFlow}>Login</Button>
+            </div>
+        {/if}
 
-    {#if $currentUser && $currentUser !== "anonymous"}
-        Angemeldet als {$currentUser.displayName}. <button onclick={logout}>logout</button>
-    {/if}
+        {#if $currentUser && $currentUser !== "anonymous"}
+            <div class="p-4 flex items-center gap-4">
+                <span>Angemeldet als <strong>{$currentUser.displayName}</strong></span>
+                <Button variant="outline" size="sm" onclick={logout}>Logout</Button>
+            </div>
+        {/if}
 
-    {#if $currentFlow}
-        <div
-                transition:fly={{ duration: 100, y: 200, opacity: 0.5, easing: quintOut }}
-                class="absolute top-0 left-0 w-full h-full backdrop-blur-sm bg-background/75"
-        >
-            <Authentikt instance={authentikt}>
-                <AuthentiktView>
-                    <emailUserSelectionPlugin.renderer plugin={emailUserSelectionPlugin}>
-                        {#snippet children(email, status, submit, setEmail)}
-                            <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4">
-                                <h2 class="text-lg font-semibold">Sign in</h2>
+        {#if authentikt.currentFlow}
+            <div
+                    transition:fly={{ duration: 250, y: 500, easing: quadOut }}
+                    class="fixed inset-0 flex items-center justify-center bg-background/75 backdrop-blur-sm z-50"
+            >
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    class="fixed right-4 top-4 z-60 rounded-full bg-black/50 text-white hover:bg-black/70"
+                    onclick={authentikt.cancelFlow}
+                >
+                    <X class="w-6 h-6" />
+                </Button>
+
+                <div class="relative w-full max-w-md p-4">
+                    <EmailUserSelectionRenderer />
+
+                    <PasswordRenderer>
+                        {#snippet children(plugin)}
+                            <div class="flex w-full flex-col gap-4 rounded-lg border bg-white p-6 shadow-xl">
+                                <h2 class="text-xl font-bold">Welcome back</h2>
+                                <p class="text-sm text-muted-foreground">Custom password UI example.</p>
                                 <input
-                                        class="rounded border px-3 py-2"
-                                        type="email"
-                                        placeholder="you@company.com"
-                                        value={email}
-                                        oninput={(event) => setEmail((event.currentTarget as HTMLInputElement).value)}
+                                    class="rounded border px-3 py-2"
+                                    type="password"
+                                    placeholder="Password"
+                                    bind:value={plugin.password}
                                 />
-                                {#if status === "user_not_existing"}
-                                    <p class="text-sm text-red-600">No user found for this email.</p>
-                                {/if}
-                                <Button onclick={submit} disabled={status === "loading"}>
-                                    {status === "loading" ? "Checking..." : "Continue"}
-                                </Button>
-                            </div>
-                        {/snippet}
-                    </emailUserSelectionPlugin.renderer>
-
-                    <passwordPlugin.renderer plugin={passwordPlugin}>
-                        {#snippet children(password, status, submit, setPassword)}
-                            <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4">
-                                <h2 class="text-lg font-semibold">Welcome back</h2>
-                                <input
-                                        class="rounded border px-3 py-2"
-                                        type="password"
-                                        placeholder="Password"
-                                        value={password}
-                                        oninput={(event) => setPassword((event.currentTarget as HTMLInputElement).value)}
-                                />
-                                {#if status === "password_incorrect"}
+                                {#if plugin.status === "password_incorrect"}
                                     <p class="text-sm text-red-600">Incorrect password. Please try again.</p>
                                 {/if}
-                                <Button onclick={submit} disabled={status === "loading"}>
-                                    {status === "loading" ? "Checking..." : "Continue"}
+                                <Button onclick={plugin.submit} disabled={plugin.status === "loading"}>
+                                    {plugin.status === "loading" ? "Checking..." : "Continue"}
                                 </Button>
                             </div>
                         {/snippet}
-                    </passwordPlugin.renderer>
+                    </PasswordRenderer>
 
-                    <totpPlugin.renderer plugin={totpPlugin}>
-                        {#snippet children(totp, status, submit, setTotp)}
-                            <div class="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-white p-4 text-center">
-                                <h2 class="text-lg font-semibold">Verify your identity</h2>
-                                <p class="text-sm text-gray-600">Enter the 6-digit code from your authenticator app.</p>
-                                
-                                <div class="flex justify-center gap-2">
-                                    {#each Array(6) as _, i}
-                                        <input
-                                            class="w-10 h-12 text-center text-xl font-bold border rounded focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                            type="text"
-                                            inputmode="numeric"
-                                            pattern="[0-9]*"
-                                            maxlength="1"
-                                            value={totp[i] || ""}
-                                            oninput={(e) => {
-                                                const val = e.currentTarget.value.replace(/[^0-9]/g, "");
-                                                const newTotp = totp.split("");
-                                                newTotp[i] = val.slice(-1);
-                                                setTotp(newTotp.join(""));
-                                                
-                                                // Auto-focus next
-                                                if (val && i < 5) {
-                                                    (e.currentTarget.nextElementSibling as HTMLInputElement)?.focus();
-                                                }
-                                            }}
-                                            onkeydown={(e) => {
-                                                if (e.key === "Backspace" && !totp[i] && i > 0) {
-                                                    (e.currentTarget.previousElementSibling as HTMLInputElement)?.focus();
-                                                }
-                                            }}
-                                        />
-                                    {/each}
-                                </div>
+                    <TotpRenderer />
 
-                                {#if status === "totp_incorrect"}
-                                    <p class="text-sm text-red-600">Invalid code. Please try again.</p>
-                                {/if}
+                    <DoneRenderer />
 
-                                <Button 
-                                    onclick={submit} 
-                                    disabled={status === "loading" || totp.length !== 6}
-                                >
-                                    {status === "loading" ? "Verifying..." : "Verify"}
-                                </Button>
-                            </div>
-                        {/snippet}
-                    </totpPlugin.renderer>
-                </AuthentiktView>
-            </Authentikt>
-
-            <div class="absolute top-0 right-0 p-4">
-                <Button variant="ghost" size="icon" onclick={authentikt.cancelFlow}>
-                    <X />
-                </Button>
+                </div>
             </div>
-        </div>
-    {/if}
+        {/if}
 
-    {@render children()}
-
+        {@render children()}
+    </Authentikt>
 </div>

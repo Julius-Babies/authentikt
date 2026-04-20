@@ -2,9 +2,11 @@ import type { Snippet } from "svelte";
 
 export type TotpStatus = "ready" | "loading" | "totp_incorrect" | "error";
 
-export type TotpSnippet = Snippet<[
-    totp: string,
-    status: TotpStatus,
-    submit: () => Promise<void>,
-    updateTotp: (value: string) => void
-]>;
+export type TotpPluginInstance = {
+    totp: string;
+    status: TotpStatus;
+    isActive: boolean;
+    submit: () => Promise<void>;
+}
+
+export type TotpSnippet = Snippet<[TotpPluginInstance]>;

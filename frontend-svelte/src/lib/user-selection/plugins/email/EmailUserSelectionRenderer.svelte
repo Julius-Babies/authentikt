@@ -1,66 +1,53 @@
 <script lang="ts">
     import { useAuthentiktContext } from "$lib/context";
-    import type { EmailUserSelectionPlugin } from "$lib/user-selection/plugins/email/EmailUserSelectionPlugin";
+    import { EmailUserSelectionPlugin } from "./EmailUserSelectionPlugin.svelte";
     import type {
-        EmailUserSelectionPayload,
+        EmailUserSelectionPluginInstance,
         EmailUserSelectionSnippet,
-        EmailUserSelectionStatus,
-    } from "$lib/user-selection/plugins/email/types";
+    } from "./types";
 
     let {
-        plugin,
         payload,
         children,
     }: {
-        plugin: EmailUserSelectionPlugin;
         payload?: Record<string, unknown>;
         children?: EmailUserSelectionSnippet;
     } = $props();
 
     const authentikt = useAuthentiktContext();
-    const currentFlow = authentikt.currentFlow;
+    const namespace = "authentikt-builtin/email";
 
-    let email = $state("admin@acme.com");
-    let status = $state<EmailUserSelectionStatus>("ready");
-
-    const typedPayload = $derived<EmailUserSelectionPayload>({
-        with_username: payload?.with_username === true,
-    });
-
-    const isActive = $derived(
-        $currentFlow?.step?.type === "user_selection" &&
-        $currentFlow.step.plugins.some((candidate) => candidate.namespace === plugin.namespace)
+    const plugin = authentikt.linkUserSelectionPlugin<EmailUserSelectionPluginInstance>(
+        namespace,
+        EmailUserSelectionRenderer,
+        () => new EmailUserSelectionPlugin(authentikt, namespace, () => payload)
     );
-
-    async function submit() {
-        status = "loading";
-        try {
-            const result = await plugin.selectUserByEmail(email);
-            if (result === "not-existing") {
-                status = "user_not_existing";
-            }
-        } catch (error) {
-            console.error(error);
-            status = "error";
-        }
-    }
-
-    function updateEmail(value: string) {
-        email = value;
-    }
 </script>
 
-{#if isActive}
+<script lang="ts" module>
+    import EmailUserSelectionRenderer from "./EmailUserSelectionRenderer.svelte";
+</script>
+
+{#if plugin.isActive}
     {#if children}
-        {@render children(email, status, submit, updateEmail, typedPayload)}
+        {@render children(plugin)}
     {:else}
         <div class="flex flex-col gap-2">
-            <input type="email" placeholder="Email" bind:value={email} />
-            {#if status === "user_not_existing"}
-                <span class="text-red-400">User does not exist</span>
+            <input 
+                type="email" 
+                placeholder="Email address" 
+                bind:value={plugin.email} 
+                class="border p-2 rounded"
+            />
+            {#if plugin.status === "user_not_existing"}
+                <span class="text-red-400 text-sm">User does not exist</span>
             {/if}
-            <button onclick={submit} disabled={status === "loading"}>
-                {status === "loading" ? "Checking..." : "Continue"}
+            <button 
+                onclick={plugin.submit} 
+                disabled={plugin.status === "loading"}
+                class="bg-blue-600 text-white p-2 rounded disabled:opacity-50"
+            >
+                {plugin.status === "loading" ? "Checking..." : "Continue"}
             </button>
         </div>
     {/if}

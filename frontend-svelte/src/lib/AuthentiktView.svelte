@@ -1,58 +1,65 @@
 <script lang="ts">
     import { useAuthentiktContext } from "$lib/context";
 
-    let {
-        children
-    }: {
-        children?: import("svelte").Snippet;
-    } = $props();
-
     const authentikt = useAuthentiktContext();
-    const currentFlow = authentikt.currentFlow;
+    const currentFlow = $derived(authentikt.currentFlow);
+
     const activePlugin = $derived.by(() => {
-        const step = $currentFlow?.step;
+        const step = currentFlow?.step;
         if (!step || step.type !== "step") return null;
-        return authentikt.configuration.installedPlugins.find((plugin) => plugin.namespace === step.namespace) ?? null;
+        return (
+            authentikt.plugins.find((p) => p.namespace === step.namespace) ?? {
+                namespace: step.namespace,
+                component: null,
+            }
+        );
     });
-    const activeRenderer = $derived.by(() => activePlugin?.renderer ?? null);
 
     const activeUserSelections = $derived.by(() => {
-        const step = $currentFlow?.step;
+        const step = currentFlow?.step;
         if (!step || step.type !== "user_selection") return [];
 
-        return step.plugins
-            .flatMap((candidate) => {
-                const plugin = authentikt.configuration.installedUserSelectionPlugins.find(
-                    (installedPlugin) => installedPlugin.namespace === candidate.namespace
-                );
-                if (!plugin) return [];
+        return step.plugins.map((candidate) => {
+            const pluginEntry = authentikt.userSelectionPlugins.find(
+                (p) => p.namespace === candidate.namespace
+            );
+            return {
+                namespace: candidate.namespace,
+                component: pluginEntry?.component ?? null,
+                payload: candidate.payload,
+            };
+        });
+    });
 
-                return [{
-                    namespace: plugin.namespace,
-                    plugin,
-                    renderer: plugin.renderer,
-                    payload: candidate.payload,
-                }];
+    $effect(() => {
+        if (authentikt.debug) {
+            console.log("AuthentiktView State:", {
+                currentFlow,
+                activeUserSelections,
+                activePlugin,
+                registeredPlugins: authentikt.plugins.map(p => p.namespace),
+                registeredUserSelectionPlugins: authentikt.userSelectionPlugins.map(p => p.namespace)
             });
+        }
     });
 </script>
 
-{#if $currentFlow?.step?.type === "user_selection"}
-    {#if activeUserSelections.length > 0}
+{#if currentFlow?.step?.type === "user_selection"}
+    <div class="authentikt-user-selection-view">
         {#each activeUserSelections as entry (entry.namespace)}
-            {@const Renderer = entry.renderer}
-            <Renderer plugin={entry.plugin} payload={entry.payload}>
-                {@render children?.()}
-            </Renderer>
+            {#if entry.component}
+                {@const Renderer = entry.component}
+                <Renderer payload={entry.payload} />
+            {/if}
         {/each}
-    {/if}
-{:else if $currentFlow?.step?.type === "step"}
-    {#if activePlugin && activeRenderer}
-        {#key activePlugin.namespace}
-            {@const Renderer = activeRenderer}
-            <Renderer plugin={activePlugin}>
-            {@render children?.()}
-            </Renderer>
-        {/key}
-    {/if}
+    </div>
+{:else if currentFlow?.step?.type === "step"}
+    <div class="authentikt-step-view">
+        {#if activePlugin?.component}
+            {#key activePlugin.namespace}
+                {@const Renderer = activePlugin.component}
+                <Renderer />
+            {/key}
+        {/if}
+    </div>
 {/if}
