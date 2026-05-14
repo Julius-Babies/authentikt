@@ -62,7 +62,7 @@ jobs:
       - name: Build and publish
         run: |
           PATH="node_modules/.bin:$PATH"
+          echo "@Julius-Babies:registry=https://npm.pkg.github.com/" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
           bun run prepack
-          bun publish --access public
-        env:
-          BUN_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          bun publish
