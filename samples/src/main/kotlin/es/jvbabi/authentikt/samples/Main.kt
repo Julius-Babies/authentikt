@@ -94,6 +94,8 @@ fun Application.module() {
                 value = "token-for-${user.email}",
                 validFor = 60.days
             )
+
+            redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
         }
     }
 

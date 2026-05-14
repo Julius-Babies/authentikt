@@ -31,19 +31,16 @@
         void plugin.complete();
     });
 
-    $effect(() => {
+    $effect(async () => {
         const result = plugin.result;
         if (!result) return;
 
-        const timeout = setTimeout(async () => {
-            await authentikt.cancelFlow();
-            if (result.type === "redirect") {
-                window.location.href = result.to;
-            } else {
-                window.location.reload();
-            }
-        }, 2500);
-
+        await authentikt.cancelFlow();
+        if (result.type === "redirect") {
+            window.location.href = result.to;
+        } else {
+            window.location.reload();
+        }
         return () => clearTimeout(timeout);
     });
 </script>
