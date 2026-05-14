@@ -6,6 +6,7 @@ import type {
     UserSelectionPluginLike
 } from "./plugins/UserSelectionPlugin.types";
 import {replaceState} from "$app/navigation";
+import {page} from "$app/state";
 
 /**
  * Configuration options passed to the `<Authentikt>` component.
@@ -362,6 +363,6 @@ export class Authentikt {
 
     private replaceBrowserUrl(url: URL): void {
         if (typeof window === "undefined") return;
-        replaceState(url, window.history.state);
+        replaceState(url, page.state);
     }
 }
