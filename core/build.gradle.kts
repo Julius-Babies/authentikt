@@ -5,6 +5,8 @@ plugins {
     `maven-publish`
 }
 
+group = "es.jvbabi.authentikt"
+
 repositories {
     mavenCentral()
 }
@@ -32,6 +34,7 @@ publishing {
     publications {
         create<MavenPublication>("core") {
             from(components["kotlin"])
+            artifactId = "authentikt-core"
             pom {
                 name.set("authentikt-core")
                 description.set("Kotlin/Ktor multi-step authentication flow library")

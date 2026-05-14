@@ -6,7 +6,16 @@ on:
       - "v*"
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.tag.outputs.VERSION }}
+    steps:
+      - run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        id: tag
+
   ktor:
+    needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,18 +38,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Extract version from tag
-        id: tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-
-      - name: Set version and publish
+      - name: Publish to GitHub Packages
         run: |
           ./gradlew :core:publish \
-            -Pversion=${{ steps.tag.outputs.VERSION }} \
+            -Pversion=${{ needs.version.outputs.semver }} \
             -Pgpr.user=${{ github.actor }} \
             -Pgpr.key=${{ secrets.GITHUB_TOKEN }}
 
   svelte:
+    needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,8 +67,15 @@ jobs:
 
       - name: Build and publish
         run: |
+          VERSION="${{ needs.version.outputs.semver }}"
+
+          # Set version from tag
+          jq ".version = \"$VERSION\"" package.json > package.json.tmp && mv package.json.tmp package.json
+
+          # Configure GitHub Packages auth
           PATH="node_modules/.bin:$PATH"
           echo "@Julius-Babies:registry=https://npm.pkg.github.com/" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+
           bun run prepack
           bun publish
