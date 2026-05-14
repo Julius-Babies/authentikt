@@ -26,6 +26,11 @@ kotlin {
     }
 }
 
+val sourcesJar by tasks.registering(Jar::class) {
+    archiveClassifier.set("sources")
+    from(sourceSets.main.get().allSource)
+}
+
 tasks.test {
     useJUnitPlatform()
 }
@@ -34,27 +39,30 @@ publishing {
     publications {
         create<MavenPublication>("core") {
             from(components["kotlin"])
+            artifact(sourcesJar)
             artifactId = "authentikt-core"
             pom {
-                name.set("authentikt-core")
-                description.set("Kotlin/Ktor multi-step authentication flow library")
-                url.set("https://github.com/Julius-Babies/authentikt")
+                name = "authentikt-core"
+                description = "Kotlin/Ktor multi-step authentication flow library"
+                url = "https://github.com/Julius-Babies/authentikt"
+
                 licenses {
                     license {
-                        name.set("MIT")
-                        url.set("https://opensource.org/licenses/MIT")
+                        name = "MIT"
+                        url = "https://opensource.org/licenses/MIT"
                     }
                 }
+
                 developers {
                     developer {
-                        id.set("Julius-Babies")
-                        name.set("Julius Babies")
+                        id = "Julius-Babies"
+                        name = "Julius Babies"
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/Julius-Babies/authentikt.git")
-                    developerConnection.set("scm:git:ssh://github.com/Julius-Babies/authentikt.git")
-                    url.set("https://github.com/Julius-Babies/authentikt")
+                    connection = "scm:git:git://github.com/Julius-Babies/authentikt.git"
+                    developerConnection = "scm:git:ssh://github.com/Julius-Babies/authentikt.git"
+                    url = "https://github.com/Julius-Babies/authentikt"
                 }
             }
         }
