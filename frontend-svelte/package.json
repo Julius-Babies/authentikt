@@ -30,6 +30,10 @@
 			"svelte": "./dist/index.js"
 		}
 	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://npm.pkg.github.com"
+	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
 	},
