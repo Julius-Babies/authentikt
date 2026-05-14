@@ -10,9 +10,26 @@ import io.ktor.server.routing.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
+/**
+ * Final authentication step that generates a token and completes the flow.
+ *
+ * This plugin should be the last step in the auth pipeline. It generates an
+ * auth token (JWT, session cookie, etc.), optionally sets a cookie on the response,
+ * and signals completion to the frontend.
+ *
+ * ### Usage
+ * ```kotlin
+ * install(DonePlugin {
+ *     generateToken { session, user -> jwtService.createToken(user) }
+ *     cookie(name = "auth_token", validFor = 7.days)
+ * })
+ * ```
+ *
+ * @param configuration lambda that configures token generation and cookie options.
+ */
 class DonePlugin<USER>(
     configuration: DonePluginConfigurationBuilder<USER>.() -> Unit,
-): BasePlugin<DoneState>(
+) : BasePlugin<DoneState>(
     namespace = "authentikt-builtin/done",
 ) {
     private val configuration = DonePluginConfigurationBuilder<USER>()
@@ -59,14 +76,32 @@ class DonePlugin<USER>(
     }
 }
 
+/**
+ * DSL builder for [DonePlugin] configuration.
+ */
 class DonePluginConfigurationBuilder<USER> {
     private var generateToken: DonePluginConfiguration.GenerateToken<USER>? = null
     private var tokenCookie: DonePluginConfiguration.TokenCookie? = null
 
+    /**
+     * Sets the token generation callback.
+     *
+     * @param block suspending function that receives the session and user object,
+     *   returning the auth token string.
+     */
     fun generateToken(block: DonePluginConfiguration.GenerateToken<USER>) {
         this.generateToken = block
     }
 
+    /**
+     * Configures an auth cookie to be set in the response after token generation.
+     *
+     * @param name cookie name.
+     * @param validFor cookie lifetime.
+     * @param httpOnly whether the cookie is HTTP-only (default `true`).
+     * @param path cookie path (default `"/"`).
+     * @param secure whether the cookie requires HTTPS (default `true`).
+     */
     fun cookie(
         name: String,
         validFor: Duration,
@@ -92,9 +127,14 @@ class DonePluginConfigurationBuilder<USER> {
     }
 }
 
+/**
+ * State for the done / token generation step.
+ *
+ * @param token the generated auth token, or null initially.
+ */
 data class DoneState(
     val token: String?,
-): BaseState {
+) : BaseState {
     override suspend fun isCompleted(): Boolean = this.token != null
     override suspend fun createClientState(session: Session<*>): Map<String, Any?> = emptyMap()
 }

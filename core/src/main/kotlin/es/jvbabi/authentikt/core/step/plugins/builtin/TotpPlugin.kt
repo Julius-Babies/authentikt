@@ -19,6 +19,23 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaInstant
 
+/**
+ * Time-based One-Time Password verification step plugin.
+ *
+ * Validates a TOTP code either by checking against a generated code from a stored secret,
+ * or by delegating to a custom validation callback.
+ *
+ * ### Usage
+ * ```kotlin
+ * install(TotpPlugin {
+ *     getSecret { user -> user.totpSecret }
+ *     // OR
+ *     validate { user, code -> myTotpService.isValid(user, code) }
+ * })
+ * ```
+ *
+ * @param configuration lambda that configures TOTP validation.
+ */
 class TotpPlugin<USER>(
     configuration: TotpPluginConfigurationBuilder<USER>.() -> Unit,
 ) : BasePlugin<TotpState>(
@@ -56,6 +73,11 @@ data class TotpRequest(
     @SerialName("totp_code") val totp: String
 )
 
+/**
+ * State for the TOTP step.
+ *
+ * @param isValidated whether the TOTP code was successfully verified.
+ */
 data class TotpState(
     val isValidated: Boolean,
 ) : BaseState {
@@ -66,22 +88,55 @@ data class TotpState(
     override suspend fun isCompleted(): Boolean = this.isValidated
 }
 
+/**
+ * DSL builder for [TotpPlugin] configuration.
+ */
 class TotpPluginConfigurationBuilder<USER> {
     typealias TotpCustomCheck<USER> = suspend (user: USER, totp: String) -> Boolean
     typealias TotpGetSecret<USER> = suspend (user: USER) -> String
 
+    /**
+     * Clock instance used for TOTP time-window generation. Defaults to [Clock.System].
+     */
     var clock: Clock = Clock.System
     private var checkOtp: TotpCustomCheck<USER>? = null
     private var getSecret: TotpGetSecret<USER>? = null
 
+    /**
+     * Length of each TOTP time window. Defaults to 30 seconds.
+     */
     var totpDuration: Duration = 30.seconds
+
+    /**
+     * Number of digits in the generated code. Defaults to 6.
+     */
     var digits: Int = 6
+
+    /**
+     * HMAC algorithm used for code generation. Defaults to SHA1.
+     */
     var hmacAlgorithm: TotpPluginConfiguration.TotpHmacAlgorithm = TotpPluginConfiguration.TotpHmacAlgorithm.SHA1
 
+    /**
+     * Sets a custom TOTP validation callback.
+     *
+     * Use this when you have your own TOTP verification logic.
+     *
+     * @param block suspending function that receives the user object and the
+     *   submitted code, returning `true` if valid.
+     */
     fun validate(block: TotpCustomCheck<USER>) {
         this.checkOtp = block
     }
 
+    /**
+     * Sets the secret retrieval callback for server-side TOTP generation.
+     *
+     * When this is set, the plugin generates the expected code internally and
+     * compares it against the user-submitted code.
+     *
+     * @param block suspending function that returns the TOTP secret for the given user.
+     */
     fun getSecret(block: TotpGetSecret<USER>) {
         getSecret = block
     }
@@ -101,6 +156,9 @@ class TotpPluginConfigurationBuilder<USER> {
     }
 }
 
+/**
+ * Resolved configuration for the TOTP plugin.
+ */
 data class TotpPluginConfiguration<USER>(
     val clock: Clock,
     val checkUser: TotpPluginConfigurationBuilder.TotpCustomCheck<USER>?,

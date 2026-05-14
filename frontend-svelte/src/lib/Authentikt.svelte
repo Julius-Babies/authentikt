@@ -3,6 +3,9 @@
     import { Authentikt, type AuthentiktConfiguration } from "./AuthentiktConfiguration.svelte";
     import type { Snippet } from "svelte";
 
+    /**
+     * Props for the `<Authentikt>` provider component.
+     */
     let {
         baseUrl,
         authentikt_debug = false,
@@ -11,9 +14,9 @@
         children?: Snippet;
     } = $props();
 
-    const instance = new Authentikt({ 
-        get baseUrl() { return baseUrl }, 
-        get authentikt_debug() { return authentikt_debug } 
+    const instance = new Authentikt({
+        get baseUrl() { return baseUrl },
+        get authentikt_debug() { return authentikt_debug }
     });
     setAuthentiktContext(instance);
 </script>

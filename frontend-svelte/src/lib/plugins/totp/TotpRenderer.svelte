@@ -2,17 +2,28 @@
     import { useAuthentiktContext } from "$lib/context";
     import { TotpPlugin } from "./TotpPlugin.svelte";
     import type { TotpPluginInstance, TotpSnippet } from "./types";
+    import type { FlowUserState } from "$lib/AuthentiktConfiguration.svelte";
 
-    let { children }: { children?: TotpSnippet } = $props();
+    let {
+        children,
+        plugin: externalPlugin,
+        user: _user,
+    }: {
+        children?: TotpSnippet;
+        plugin?: TotpPluginInstance;
+        user?: FlowUserState | null;
+    } = $props();
 
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/totp";
 
-    const plugin = authentikt.linkStepPlugin<TotpPluginInstance>(
+    const selfPlugin = authentikt.registerStepPlugin<TotpPluginInstance>(
         namespace,
         TotpRenderer,
-        () => new TotpPlugin(authentikt, namespace)
+        (auth, ns) => new TotpPlugin(auth, ns)
     );
+
+    const plugin = $derived(externalPlugin ?? selfPlugin);
 </script>
 
 <script lang="ts" module>
@@ -24,17 +35,17 @@
         {@render children(plugin)}
     {:else}
         <div class="flex flex-col gap-2">
-            <input 
-                type="text" 
-                placeholder="TOTP Code" 
-                bind:value={plugin.totp} 
+            <input
+                type="text"
+                placeholder="TOTP Code"
+                bind:value={plugin.totp}
                 class="border p-2 rounded"
             />
             {#if plugin.status === "totp_incorrect"}
                 <span class="text-red-400 text-sm">TOTP incorrect</span>
             {/if}
-            <button 
-                onclick={plugin.submit} 
+            <button
+                onclick={plugin.submit}
                 disabled={plugin.status === "loading"}
                 class="bg-blue-600 text-white p-2 rounded disabled:opacity-50"
             >

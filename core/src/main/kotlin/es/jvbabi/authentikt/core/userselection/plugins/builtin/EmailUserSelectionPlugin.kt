@@ -12,6 +12,23 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/**
+ * Email-based user identification plugin.
+ *
+ * Presents an email input field to the user. On submission, looks up the user
+ * by email via the configured `findUserByEmail` callback and sets the session's
+ * identified user if found.
+ *
+ * ### Usage
+ * ```kotlin
+ * install(EmailUserSelectionPlugin {
+ *     findUserByEmail { email -> userRepository.findByEmail(email) }
+ *     withUsername = true  // optionally request username after email
+ * })
+ * ```
+ *
+ * @param configuration lambda that configures user lookup.
+ */
 class EmailUserSelectionPlugin<USER>(
     configuration: EmailUserSelectionPluginConfigurationBuilder<USER>.() -> Unit,
 ) : BaseUserSelectionPlugin<USER>(
@@ -58,12 +75,25 @@ data class LoginEmailRequest(
     @SerialName("email") val email: String,
 )
 
+/**
+ * DSL builder for [EmailUserSelectionPlugin] configuration.
+ */
 class EmailUserSelectionPluginConfigurationBuilder<USER> {
     typealias FindUserByEmail<USER> = suspend (email: String) -> AuthentiktUser<USER>?
 
+    /**
+     * Whether the server also expects a username after the email (default `false`).
+     * Controls the `with_username` flag sent to the frontend.
+     */
     var withUsername: Boolean = false
     private var findUserByEmail: FindUserByEmail<USER>? = null
 
+    /**
+     * Sets the email-to-user lookup callback.
+     *
+     * @param block suspending function that receives an email address and returns
+     *   the matching [AuthentiktUser], or `null` if not found.
+     */
     fun findUserByEmail(block: FindUserByEmail<USER>) {
         this.findUserByEmail = block
     }

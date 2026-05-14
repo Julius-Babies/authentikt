@@ -31,8 +31,8 @@
 </script>
 
 <div class="min-w-screen min-h-screen">
-    <Authentikt 
-        baseUrl="http://localhost:8080/authentikt/" 
+    <Authentikt
+        baseUrl="http://localhost:8080/authentikt/"
         authentikt_debug={true}
     >
         {@const authentikt = useAuthentiktContext()}
@@ -102,7 +102,6 @@
                     <TotpRenderer />
 
                     <DoneRenderer />
-
                 </div>
             </div>
         {/if}

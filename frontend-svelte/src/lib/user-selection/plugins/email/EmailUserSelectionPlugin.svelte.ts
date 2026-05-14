@@ -5,11 +5,23 @@ export class EmailUserSelectionPlugin {
     email = $state("");
     status = $state<EmailUserSelectionStatus>("ready");
 
+    private readonly _ns: string;
+    private readonly authentikt: Authentikt;
+    private readonly readPayload: () => Record<string, unknown> | undefined;
+
     constructor(
-        private readonly authentikt: Authentikt,
-        private readonly namespace: string,
-        private readonly readPayload: () => Record<string, unknown> | undefined,
-    ) {}
+        authentikt: Authentikt,
+        namespace: string,
+        readPayload: () => Record<string, unknown> | undefined,
+    ) {
+        this.authentikt = authentikt;
+        this._ns = namespace;
+        this.readPayload = readPayload;
+    }
+
+    get namespace(): string {
+        return this._ns;
+    }
 
     get typedPayload(): EmailUserSelectionPayload {
         return {
@@ -19,13 +31,13 @@ export class EmailUserSelectionPlugin {
 
     get isActive(): boolean {
         return this.authentikt.currentFlow?.step?.type === "user_selection" &&
-            this.authentikt.currentFlow.step.plugins.some((candidate) => candidate.namespace === this.namespace);
+            this.authentikt.currentFlow.step.plugins.some((candidate) => candidate.namespace === this._ns);
     }
 
     submit = async (): Promise<void> => {
         this.status = "loading";
         try {
-            const url = new URL("user-selection/plugins/" + this.namespace, this.authentikt.sessionUrl);
+            const url = new URL("user-selection/plugins/" + this._ns, this.authentikt.sessionUrl);
             const response = await fetch(url.toString(), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

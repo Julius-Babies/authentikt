@@ -1,11 +1,26 @@
 <script lang="ts">
     import { DonePlugin } from "./DonePlugin.svelte";
     import { useAuthentiktContext } from "$lib/context";
+    import type { FlowUserState } from "$lib/AuthentiktConfiguration.svelte";
+
+    let {
+        plugin: externalPlugin,
+        user: _user,
+    }: {
+        plugin?: DonePlugin;
+        user?: FlowUserState | null;
+    } = $props();
 
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/done";
 
-    const plugin = authentikt.linkStepPlugin(namespace, DoneRenderer, () => new DonePlugin(authentikt, namespace));
+    const selfPlugin = authentikt.registerStepPlugin<DonePlugin>(
+        namespace,
+        DoneRenderer,
+        (auth, ns) => new DonePlugin(auth, ns)
+    );
+
+    const plugin = $derived(externalPlugin ?? selfPlugin);
 
     $effect(() => {
         if (!plugin.isActive) return;

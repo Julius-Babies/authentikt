@@ -4,6 +4,7 @@ ktor = "3.4.2"
 logback = "1.5.32"
 gson = "2.13.1"
 totp = "2.4.1"
+dokka = "2.2.0"
 
 [libraries]
 kotlin-onetimepassword = { module = "dev.turingcomplete:kotlin-onetimepassword", version.ref="totp" }
@@ -22,3 +23,4 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }

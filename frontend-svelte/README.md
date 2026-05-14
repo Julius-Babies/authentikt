@@ -1,65 +1,135 @@
-# Svelte library
+# authentikt-svelte
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+Svelte 5 client library for the authentikt authentication flow framework.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
-
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## Installation
 
 ```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+npm install authentikt-svelte
 ```
 
-To recreate this project with the same configuration:
+## Quick start
 
-```sh
-# recreate this project
-bun x sv@0.15.1 create --template library --types ts --add tailwindcss="plugins:none" --install bun authentikt-svelte
+```svelte
+<script>
+  import {
+    Authentikt,
+    AuthentiktUserSelectionRenderer,
+    AuthentiktStepRenderer,
+    PasswordRenderer,
+  } from "authentikt-svelte";
+  import { useAuthentiktContext } from "authentikt-svelte/context";
+  import { Button } from "your-ui-lib";
+</script>
+
+<Authentikt baseUrl="http://localhost:8080/authentikt/">
+  {@const auth = useAuthentiktContext()}
+
+  {#if !auth.currentFlow}
+    <Button onclick={auth.startLoginFlow}>Login</Button>
+  {:else}
+    <div class="flow-modal">
+      <button onclick={auth.cancelFlow}>✕</button>
+
+      <!-- Auto-render user selection -->
+      <AuthentiktUserSelectionRenderer />
+
+      <!-- Custom password UI with snippet override -->
+      <PasswordRenderer>
+        {#snippet children(plugin)}
+          <form onsubmit|preventDefault={plugin.submit}>
+            <input bind:value={plugin.password} type="password" placeholder="Password" />
+            {#if plugin.status === "password_incorrect"}
+              <p class="error">Incorrect password</p>
+            {/if}
+            <button type="submit" disabled={plugin.status === "loading"}>
+              {plugin.status === "loading" ? "Checking..." : "Continue"}
+            </button>
+          </form>
+        {/snippet}
+      </PasswordRenderer>
+
+      <!-- Auto-render remaining steps (TOTP, done, etc.) -->
+      <AuthentiktStepRenderer />
+    </div>
+  {/if}
+</Authentikt>
 ```
 
-## Developing
+## Architecture
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+### Plugin system
 
-```sh
-npm run dev
+Plugins follow a **headless pattern**: logic (state + actions) is separated from UI (renderer component).
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```
+registerStepPlugin(namespace, Component, factory)
+  ├── namespace — matches the server-side plugin
+  ├── Component — Svelte component that renders the UI
+  └── factory   — creates the plugin instance (reactive via $state runes)
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+Two plugin categories:
 
-## Building
+| Category | Interface | Purpose | Examples |
+|----------|-----------|---------|----------|
+| Step plugins | `StepPluginLike` | Authentication steps | password, TOTP, done |
+| User-selection plugins | `UserSelectionPluginLike` | User identification | email, username |
 
-To build your library:
+### Components
 
-```sh
-npm pack
+| Component | Purpose |
+|-----------|---------|
+| `<Authentikt>` | Context provider — creates the `Authentikt` instance |
+| `<AuthentiktStepRenderer>` | Auto-renders the active step plugin |
+| `<AuthentiktUserSelectionRenderer>` | Auto-renders active user-selection plugins |
+| `<PasswordRenderer>` | Password step (default UI + snippet override) |
+| `<TotpRenderer>` | TOTP step (default UI + snippet override) |
+| `<EmailUserSelectionRenderer>` | Email user selection (default UI + snippet override) |
+| `<DoneRenderer>` | Token receipt / completion step |
+
+### Override any part
+
+**Custom component for a built-in plugin:**
+```ts
+const auth = useAuthentiktContext();
+auth.registerStepPlugin(
+  "authentikt-builtin/password",
+  MyPasswordComponent,
+  (auth, ns) => new PasswordPlugin(auth, ns)
+);
 ```
 
-To create a production version of your showcase app:
-
-```sh
-npm run build
+**Custom plugin with built-in renderer:**
+```ts
+auth.registerStepPlugin(
+  "my-auth/sms-code",
+  PasswordRenderer, // just the default UI
+  (auth, ns) => new MySmsPlugin(auth, ns)
+);
 ```
 
-You can preview the production build with `npm run preview`.
+**Fully custom:**
+```ts
+auth.registerStepPlugin("my-auth/sms-code", MyRenderer, MyPlugin);
+```
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
+## Development
 
 ```sh
-npm publish
+cd frontend-svelte
+npm install
+npm run dev          # dev server with showcase app
+npm run check        # typecheck
+npm run prepack      # build library output → dist/
+npm run docs         # generate API docs → docs/svelte/
+```
+
+## Documentation
+
+Generate API docs with TypeDoc:
+
+```sh
+npm run docs
+# open docs/svelte/index.html
 ```

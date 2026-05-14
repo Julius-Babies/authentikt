@@ -1,10 +1,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlinx.serialization)
+    alias(libs.plugins.dokka)
 }
-
-group = "es.jvbabi.authentikt"
-version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()

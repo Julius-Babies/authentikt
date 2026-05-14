@@ -1,0 +1,15 @@
+{
+    "name": "authentikt-svelte",
+    "entryPoints": [
+        "dist/index.d.ts"
+    ],
+    "entryPointStrategy": "resolve",
+    "out": "docs/svelte",
+    "tsconfig": "tsconfig.json",
+    "readme": "README.md",
+    "includeVersion": true,
+    "excludePrivate": true,
+    "excludeProtected": true,
+    "excludeExternals": true,
+    "skipErrorChecking": true
+}

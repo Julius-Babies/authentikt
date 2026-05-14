@@ -5,20 +5,27 @@ export class PasswordPlugin {
     password = $state("");
     status = $state<PasswordStatus>("ready");
 
-    constructor(
-        private readonly authentikt: Authentikt,
-        private readonly namespace: string,
-    ) {}
+    private readonly _ns: string;
+    private readonly authentikt: Authentikt;
+
+    constructor(authentikt: Authentikt, namespace: string) {
+        this.authentikt = authentikt;
+        this._ns = namespace;
+    }
+
+    get namespace(): string {
+        return this._ns;
+    }
 
     get isActive(): boolean {
         return this.authentikt.currentFlow?.step?.type === "step" &&
-            this.authentikt.currentFlow.step.namespace === this.namespace;
+            this.authentikt.currentFlow.step.namespace === this._ns;
     }
 
     submit = async (): Promise<void> => {
         this.status = "loading";
         try {
-            const url = new URL("steps/plugins/" + this.namespace, this.authentikt.sessionUrl);
+            const url = new URL("steps/plugins/" + this._ns, this.authentikt.sessionUrl);
             const response = await fetch(url.toString(), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

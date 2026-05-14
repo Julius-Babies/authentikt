@@ -14,6 +14,16 @@ val SessionKey = AttributeKey<Session<*>>("Session")
 
 val sessions = mutableMapOf<SessionId, Session<*>>()
 
+/**
+ * Represents a single authentication session.
+ *
+ * A session is created when the client calls `POST /authentikt/login`.
+ * It tracks:
+ * - The identified user ([identifiedUser]) once a user-selection step completes.
+ * - A stack of completed authentication steps ([authenticationSteps]).
+ *
+ * @param configuration the resolved configuration for this session.
+ */
 class Session<USER>(
     private val configuration: AuthentiktConfiguration<USER>
 ) {
@@ -24,7 +34,10 @@ class Session<USER>(
     val authenticationSteps = mutableListOf<Pair<BasePlugin<*>, BaseState>>()
 
     /**
-     * Checks if a session has a step already taken or completed.
+     * Checks whether this session has already executed (and optionally completed) the given [plugin].
+     *
+     * @param plugin the plugin to check.
+     * @param needsCompletion when `true`, only returns `true` if the step has completed.
      */
     suspend fun has(plugin: BasePlugin<*>, needsCompletion: Boolean = true): Boolean {
         val stepForPlugin = this.authenticationSteps.firstOrNull { it.first == plugin } ?: return false
@@ -36,6 +49,14 @@ class Session<USER>(
         else authenticationSteps.removeLast()
     }
 
+    /**
+     * Advances the flow to the next step.
+     *
+ * Calls the configured authorization callback to determine the next plugin,
+ * creates its initial state, and pushes it onto the step stack.
+ *
+ * @throws NotInstalledPluginCalled if the returned plugin was not installed.
+     */
     suspend fun nextStep() {
         val user = this.identifiedUser ?: return
 
