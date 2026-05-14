@@ -1,6 +1,10 @@
-import type { Component } from "svelte";
-import type { StepPluginLike, StepPluginFactory, StepPluginEntry } from "./plugins/StepPlugin.types";
-import type { UserSelectionPluginLike, UserSelectionPluginFactory, UserSelectionPluginEntry } from "./plugins/UserSelectionPlugin.types";
+import type {Component} from "svelte";
+import type {StepPluginEntry, StepPluginFactory, StepPluginLike} from "./plugins/StepPlugin.types";
+import type {
+    UserSelectionPluginEntry,
+    UserSelectionPluginFactory,
+    UserSelectionPluginLike
+} from "./plugins/UserSelectionPlugin.types";
 
 /**
  * Configuration options passed to the `<Authentikt>` component.
@@ -178,6 +182,8 @@ export class Authentikt {
      *
      * @param readPayload - optional callback to read server-provided configuration
      *   for this user-selection entry.
+     * @param namespace - the identifier of the plugin. Needs to be exactly the same
+     *   as the one used in the server-side configuration.
      */
     getUserSelectionPlugin<T extends UserSelectionPluginLike>(
         namespace: string,
@@ -215,8 +221,7 @@ export class Authentikt {
     activeStepPlugin = $derived.by(() => {
         const step = this.currentFlow?.step;
         if (step?.type !== "step") return null;
-        const plugin = this.getStepPlugin(step.namespace);
-        return plugin;
+        return this.getStepPlugin(step.namespace);
     });
 
     /**
@@ -295,6 +300,23 @@ export class Authentikt {
     }
 
     /**
+     * Links the current instance to an already running flow by taking a session id.
+     * Clears any previously cached plugin instances and updates browser history.
+     */
+    linkToFlow = async (session_id: string) => {
+        this._stepInstances.clear();
+        this._userSelectionInstances.clear();
+
+        const currentUrl = this.currentUrl();
+        currentUrl.searchParams.set("_authentikt_flow_active", "true");
+        currentUrl.searchParams.set("_authentikt_session_id", session_id);
+        this.replaceBrowserUrl(currentUrl);
+
+        this.currentFlow = { session_id, step: null, user: null };
+        await this.updateState();
+    }
+
+    /**
      * Cancels the current flow, clears URL parameters and plugin instances.
      */
     cancelFlow = async () => {
@@ -319,9 +341,7 @@ export class Authentikt {
 
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
-        const data: FlowStepData = await response.json();
-
-        this.currentFlow.step = data;
+        this.currentFlow.step = await response.json();
     }
 
     /**
