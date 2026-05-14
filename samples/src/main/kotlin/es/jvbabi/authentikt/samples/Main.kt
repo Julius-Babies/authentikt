@@ -18,6 +18,7 @@ import io.ktor.server.plugins.defaultheaders.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
@@ -149,6 +150,7 @@ fun Application.module() {
     routing {
         get("/login") {
             val session = instance.createNewSession()
+            session.setPublicAttribute("auth_id", Random.nextInt(100000, 999999))
             call.respond(buildMap {
                 put("session_id", session.sessionId)
             })

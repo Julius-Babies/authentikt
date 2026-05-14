@@ -51,6 +51,7 @@ export interface FlowState {
     session_id: string;
     step: FlowStepData | null;
     user: FlowUserState | null;
+    attributes: Record<string, unknown>;
 }
 
 /**
@@ -83,7 +84,7 @@ export class Authentikt {
             const currentUrl = new URL(window.location.href);
             if (currentUrl.searchParams.get("_authentikt_flow_active") === "true") {
                 const session_id = currentUrl.searchParams.get("_authentikt_session_id");
-                this.currentFlow = { session_id: session_id ?? "", step: null, user: null };
+                this.currentFlow = { session_id: session_id ?? "", step: null, user: null, attributes: {} };
                 void this.updateState();
             }
         }
@@ -297,7 +298,7 @@ export class Authentikt {
         currentUrl.searchParams.set("_authentikt_session_id", session_id);
         this.replaceBrowserUrl(currentUrl);
 
-        this.currentFlow = { session_id, step: null, user: null };
+        this.currentFlow = { session_id, step: null, user: null, attributes: {} };
         await this.updateState();
     }
 
@@ -314,7 +315,7 @@ export class Authentikt {
         currentUrl.searchParams.set("_authentikt_session_id", session_id);
         this.replaceBrowserUrl(currentUrl);
 
-        this.currentFlow = { session_id, step: null, user: null };
+        this.currentFlow = { session_id, step: null, user: null, attributes: {} };
         await this.updateState();
     }
 
@@ -343,7 +344,10 @@ export class Authentikt {
 
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
-        this.currentFlow.step = await response.json();
+        const data = await response.json();
+        const { attributes, ...stepData } = data;
+        this.currentFlow.step = stepData as FlowStepData;
+        this.currentFlow.attributes = (attributes ?? {}) as Record<string, unknown>;
     }
 
     /**

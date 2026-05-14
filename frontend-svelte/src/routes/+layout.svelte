@@ -78,6 +78,9 @@
                             <div class="flex w-full flex-col gap-4 rounded-lg border bg-white p-6 shadow-xl">
                                 <h2 class="text-xl font-bold">Welcome back</h2>
                                 <p class="text-sm text-muted-foreground">Custom password UI example.</p>
+                                {#if authentikt.currentFlow?.attributes?.auth_id}
+                                    <p class="text-xs text-gray-400">Session: {authentikt.currentFlow.attributes.auth_id}</p>
+                                {/if}
                                 <input
                                     class="rounded border px-3 py-2"
                                     type="password"

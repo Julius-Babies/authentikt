@@ -23,6 +23,7 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
                         put("payload", plugin.createClientState())
                     }
                 })
+                put("attributes", session.getPublicAttributes())
             })
 
             return@get
@@ -34,6 +35,7 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
             put("type", "step")
             put("namespace", stepForUser.namespace)
             put("payload", data.createClientState(session))
+            put("attributes", session.getPublicAttributes())
         })
     }
 }

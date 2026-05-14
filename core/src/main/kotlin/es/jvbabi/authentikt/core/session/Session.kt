@@ -33,6 +33,44 @@ class Session<USER>(
 
     val authenticationSteps = mutableListOf<Pair<BasePlugin<*>, BaseState>>()
 
+    private val _privateAttributes = mutableMapOf<AttributeKey<*>, Any?>()
+    private val _publicAttributes = mutableMapOf<String, Any?>()
+
+    /**
+     * Stores a private attribute on this session.
+     *
+     * Private attributes are kept server-side only and are never sent to the client.
+     * Use [AttributeKey] for type-safe access.
+     */
+    fun <T : Any> setAttribute(key: AttributeKey<T>, value: T) {
+        _privateAttributes[key] = value
+    }
+
+    /**
+     * Retrieves a private attribute previously set via [setAttribute].
+     *
+     * @return the stored value, or `null` if no value was set for this key.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> getAttribute(key: AttributeKey<T>): T? {
+        return _privateAttributes[key] as? T
+    }
+
+    /**
+     * Stores a public attribute on this session.
+     *
+     * Public attributes are included in the flow-check response sent to the client.
+     * Values must be serializable by the configured JSON library (Gson).
+     */
+    fun setPublicAttribute(name: String, value: Any?) {
+        _publicAttributes[name] = value
+    }
+
+    /**
+     * Returns all public attributes currently stored on this session.
+     */
+    fun getPublicAttributes(): Map<String, Any?> = _publicAttributes.toMap()
+
     /**
      * Checks whether this session has already executed (and optionally completed) the given [plugin].
      *
@@ -52,10 +90,10 @@ class Session<USER>(
     /**
      * Advances the flow to the next step.
      *
- * Calls the configured authorization callback to determine the next plugin,
- * creates its initial state, and pushes it onto the step stack.
- *
- * @throws NotInstalledPluginCalled if the returned plugin was not installed.
+     * Calls the configured authorization callback to determine the next plugin,
+     * creates its initial state, and pushes it onto the step stack.
+     *
+     * @throws NotInstalledPluginCalled if the returned plugin was not installed.
      */
     suspend fun nextStep() {
         val user = this.identifiedUser ?: return
