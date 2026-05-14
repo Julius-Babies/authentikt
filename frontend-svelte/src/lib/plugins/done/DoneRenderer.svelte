@@ -1,20 +1,23 @@
 <script lang="ts">
     import { DonePlugin } from "./DonePlugin.svelte";
     import { useAuthentiktContext } from "$lib/context";
+    import type { DonePluginInstance, DoneSnippet } from "./types";
     import type { FlowUserState } from "$lib/AuthentiktConfiguration.svelte";
 
     let {
+        children,
         plugin: externalPlugin,
         user: _user,
     }: {
-        plugin?: DonePlugin;
+        children?: DoneSnippet;
+        plugin?: DonePluginInstance;
         user?: FlowUserState | null;
     } = $props();
 
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/done";
 
-    const selfPlugin = authentikt.registerStepPlugin<DonePlugin>(
+    const selfPlugin = authentikt.registerStepPlugin<DonePluginInstance>(
         namespace,
         DoneRenderer,
         (auth, ns) => new DonePlugin(auth, ns)
@@ -24,7 +27,24 @@
 
     $effect(() => {
         if (!plugin.isActive) return;
+        if (plugin.result !== null) return;
         void plugin.complete();
+    });
+
+    $effect(() => {
+        const result = plugin.result;
+        if (!result) return;
+
+        const timeout = setTimeout(async () => {
+            await authentikt.cancelFlow();
+            if (result.type === "redirect") {
+                window.location.href = result.to;
+            } else {
+                window.location.reload();
+            }
+        }, 2500);
+
+        return () => clearTimeout(timeout);
     });
 </script>
 
@@ -33,8 +53,22 @@
 </script>
 
 {#if plugin.isActive}
-    <div class="flex flex-col items-center gap-4">
-        <span class="text-green-600 font-bold">Successfully authenticated!</span>
-        <p>You are being redirected...</p>
-    </div>
+    {#if children}
+        {@render children(plugin)}
+    {:else if plugin.result === null}
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-green-600 font-bold">Successfully authenticated!</span>
+            <p>Completing authentication...</p>
+        </div>
+    {:else if plugin.result.type === "redirect"}
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-green-600 font-bold">Successfully authenticated!</span>
+            <p>Redirecting to <a href={plugin.result.to} class="underline">{plugin.result.to}</a></p>
+        </div>
+    {:else}
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-green-600 font-bold">Successfully authenticated!</span>
+            <p>You are being redirected...</p>
+        </div>
+    {/if}
 {/if}

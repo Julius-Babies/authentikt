@@ -1,6 +1,8 @@
 import type { Authentikt } from "$lib/AuthentiktConfiguration.svelte";
+import type { DoneResult } from "./types";
 
 export class DonePlugin {
+    result = $state<DoneResult>(null);
     private isCompleting = false;
     private readonly _ns: string;
     private readonly authentikt: Authentikt;
@@ -20,7 +22,7 @@ export class DonePlugin {
     }
 
     complete = async (): Promise<void> => {
-        if (this.isCompleting) return;
+        if (this.isCompleting || this.result !== null) return;
         this.isCompleting = true;
 
         try {
@@ -29,12 +31,7 @@ export class DonePlugin {
             if (!response.ok) return;
 
             const data = await response.json();
-
-            await this.authentikt.cancelFlow();
-
-            if (data?.type === "redirect" && data?.to) {
-                window.location.href = data.to;
-            }
+            this.result = data as DoneResult;
         } finally {
             this.isCompleting = false;
         }

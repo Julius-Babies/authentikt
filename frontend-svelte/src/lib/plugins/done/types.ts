@@ -1,7 +1,15 @@
 import type { Snippet } from "svelte";
 
-/**
- * Snippet type for custom "done" / token-receipt UI overrides.
- * The DonePlugin does not expose interactive state, so the snippet receives no arguments.
- */
-export type DoneSnippet = Snippet<[]>;
+export type DoneResult =
+    | { type: "success"; cookies?: string[] }
+    | { type: "redirect"; to: string; cookies?: string[] }
+    | null;
+
+export type DonePluginInstance = {
+    namespace: string;
+    isActive: boolean;
+    result: DoneResult;
+    complete: () => Promise<void>;
+};
+
+export type DoneSnippet = Snippet<[DonePluginInstance]>;

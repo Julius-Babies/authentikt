@@ -45,12 +45,23 @@ class DonePlugin<USER>(
                         )
                     }
 
+                    val cookieNames = scope.cookies.map { it.name }
+
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
 
                     if (scope.redirectTo != null) {
                         call.respondGson(buildGenericMap {
                             put("type", "redirect")
                             put("to", scope.redirectTo)
+                            if (cookieNames.isNotEmpty()) put("cookies", cookieNames)
+                        })
+                        return@get
+                    }
+
+                    if (cookieNames.isNotEmpty()) {
+                        call.respondGson(buildGenericMap {
+                            put("type", "success")
+                            put("cookies", cookieNames)
                         })
                         return@get
                     }
