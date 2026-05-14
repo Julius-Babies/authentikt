@@ -56,11 +56,6 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Configure npm auth
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
-          echo "@Julius-Babies:registry=https://npm.pkg.github.com" >> .npmrc
-
       - name: Install dependencies
         run: bun install
 
@@ -69,3 +64,5 @@ jobs:
           PATH="node_modules/.bin:$PATH"
           bun run prepack
           bun publish --access public
+        env:
+          BUN_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
