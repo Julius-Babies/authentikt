@@ -34,9 +34,7 @@ export type {
 } from "./AuthentiktConfiguration.svelte";
 
 export { default as Authentikt } from "./Authentikt.svelte";
-export { default as AuthentiktView } from "./AuthentiktView.svelte";
-export { default as AuthentiktStepRenderer } from "./AuthentiktStepRenderer.svelte";
-export { default as AuthentiktUserSelectionRenderer } from "./AuthentiktUserSelectionRenderer.svelte";
+export { default as AuthentiktDebug } from "./AuthentiktDebug.svelte";
 
 export type { StepPluginLike, StepPluginComponentProps, StepPluginEntry } from "./plugins/StepPlugin.types";
 export type { UserSelectionPluginLike, UserSelectionPluginComponentProps, UserSelectionPluginEntry } from "./plugins/UserSelectionPlugin.types";

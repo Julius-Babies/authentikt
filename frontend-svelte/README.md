@@ -31,9 +31,6 @@ npm install authentikt-svelte
     <div class="flow-modal">
       <button onclick={auth.cancelFlow}>✕</button>
 
-      <!-- Auto-render user selection -->
-      <AuthentiktUserSelectionRenderer />
-
       <!-- Custom password UI with snippet override -->
       <PasswordRenderer>
         {#snippet children(plugin)}
@@ -48,9 +45,6 @@ npm install authentikt-svelte
           </form>
         {/snippet}
       </PasswordRenderer>
-
-      <!-- Auto-render remaining steps (TOTP, done, etc.) -->
-      <AuthentiktStepRenderer />
     </div>
   {/if}
 </Authentikt>

@@ -36,7 +36,7 @@
 </script>
 
 <div
-        class="absolute flex flex-col bg-white border border-orange-400"
+        class="absolute flex flex-col bg-white border border-orange-400 z-50"
         style="top: {debugPosition.y}px; left: {debugPosition.x}px; touch-action: none;"
 >
     <div

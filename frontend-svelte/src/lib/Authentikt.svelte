@@ -2,6 +2,7 @@
     import { setAuthentiktContext } from "./context";
     import { Authentikt, type AuthentiktConfiguration } from "./AuthentiktConfiguration.svelte";
     import type { Snippet } from "svelte";
+    import {AuthentiktDebug} from "$lib";
 
     /**
      * Props for the `<Authentikt>` provider component.
@@ -31,3 +32,7 @@
 </script>
 
 {@render children?.()}
+
+{#if authentikt_debug}
+    <AuthentiktDebug authentikt={instance} />
+{/if}
