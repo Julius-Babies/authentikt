@@ -28,8 +28,13 @@ export class DonePlugin {
             const response = await fetch(url.toString());
             if (!response.ok) return;
 
+            const data = await response.json();
+
             await this.authentikt.cancelFlow();
-            window.location.reload();
+
+            if (data?.type === "redirect" && data?.to) {
+                window.location.href = data.to;
+            }
         } finally {
             this.isCompleting = false;
         }

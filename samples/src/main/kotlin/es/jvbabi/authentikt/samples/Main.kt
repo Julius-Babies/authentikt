@@ -88,14 +88,13 @@ fun Application.module() {
     }
 
     val donePlugin = DonePlugin<User> {
-        generateToken { _, user ->
-            return@generateToken "token-for-${user.email}"
+        onSuccess { _, user ->
+            cookie(
+                name = "SessionToken",
+                value = "token-for-${user.email}",
+                validFor = 60.days
+            )
         }
-
-        cookie(
-            name = "SessionToken",
-            validFor = 60.days
-        )
     }
 
     val totpClock = object : Clock {

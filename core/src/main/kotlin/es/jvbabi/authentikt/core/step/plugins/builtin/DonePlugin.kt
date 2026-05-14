@@ -4,29 +4,11 @@ import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
-import io.ktor.http.*
-import io.ktor.server.response.*
+import es.jvbabi.authentikt.core.utils.buildGenericMap
+import es.jvbabi.authentikt.core.utils.respondGson
 import io.ktor.server.routing.*
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
 
-/**
- * Final authentication step that generates a token and completes the flow.
- *
- * This plugin should be the last step in the auth pipeline. It generates an
- * auth token (JWT, session cookie, etc.), optionally sets a cookie on the response,
- * and signals completion to the frontend.
- *
- * ### Usage
- * ```kotlin
- * install(DonePlugin {
- *     generateToken { session, user -> jwtService.createToken(user) }
- *     cookie(name = "auth_token", validFor = 7.days)
- * })
- * ```
- *
- * @param configuration lambda that configures token generation and cookie options.
- */
 class DonePlugin<USER>(
     configuration: DonePluginConfigurationBuilder<USER>.() -> Unit,
 ) : BasePlugin<DoneState>(
@@ -37,7 +19,7 @@ class DonePlugin<USER>(
         .build()
 
     override suspend fun createState(session: Session<*>): DoneState {
-        return DoneState(token = null)
+        return DoneState()
     }
 
     override fun installRoutes(inRoute: Route) {
@@ -47,109 +29,95 @@ class DonePlugin<USER>(
                 val user = session.identifiedUser!!.user
 
                 val step = session.authenticationSteps[session.authenticationSteps.lastIndex].second as DoneState
-                val token = if (step.isCompleted()) {
-                    step.token!!
-                } else {
-                    val token = configuration.generateToken(session, user)
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(token)
-                    token
+
+                if (!step.isCompleted()) {
+                    val scope = DonePluginScope()
+                    configuration.onSuccess(scope, session, user)
+
+                    for (cookie in scope.cookies) {
+                        call.response.cookies.append(
+                            name = cookie.name,
+                            value = cookie.value,
+                            maxAge = cookie.validFor.inWholeSeconds,
+                            secure = cookie.secure,
+                            httpOnly = cookie.httpOnly,
+                            path = cookie.path
+                        )
+                    }
+
+                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
+
+                    if (scope.redirectTo != null) {
+                        call.respondGson(buildGenericMap {
+                            put("type", "redirect")
+                            put("to", scope.redirectTo)
+                        })
+                        return@get
+                    }
                 }
 
-                if (configuration.tokenCookie != null) {
-                    call.response.cookies.append(
-                        name = configuration.tokenCookie.name,
-                        value = token,
-                        maxAge = configuration.tokenCookie.validFor.inWholeSeconds,
-                        secure = configuration.tokenCookie.secure,
-                        httpOnly = configuration.tokenCookie.httpOnly,
-                        path = configuration.tokenCookie.path
-                    )
-                }
-
-
-                call.respond(
-                    message = mapOf("token" to token),
-                    status = HttpStatusCode.OK
-                )
+                call.respondGson(buildGenericMap {
+                    put("type", "success")
+                })
             }
         }
     }
 }
 
-/**
- * DSL builder for [DonePlugin] configuration.
- */
-class DonePluginConfigurationBuilder<USER> {
-    private var generateToken: DonePluginConfiguration.GenerateToken<USER>? = null
-    private var tokenCookie: DonePluginConfiguration.TokenCookie? = null
+class DonePluginScope {
+    private val _cookies = mutableListOf<Cookie>()
+    private var _redirectTo: String? = null
 
-    /**
-     * Sets the token generation callback.
-     *
-     * @param block suspending function that receives the session and user object,
-     *   returning the auth token string.
-     */
-    fun generateToken(block: DonePluginConfiguration.GenerateToken<USER>) {
-        this.generateToken = block
-    }
+    val cookies: List<Cookie> get() = _cookies.toList()
+    val redirectTo: String? get() = _redirectTo
 
-    /**
-     * Configures an auth cookie to be set in the response after token generation.
-     *
-     * @param name cookie name.
-     * @param validFor cookie lifetime.
-     * @param httpOnly whether the cookie is HTTP-only (default `true`).
-     * @param path cookie path (default `"/"`).
-     * @param secure whether the cookie requires HTTPS (default `true`).
-     */
     fun cookie(
         name: String,
+        value: String,
         validFor: Duration,
         httpOnly: Boolean = true,
         path: String = "/",
         secure: Boolean = true,
     ) {
-        this.tokenCookie = DonePluginConfiguration.TokenCookie(
-            name = name,
-            validFor = validFor,
-            httpOnly = httpOnly,
-            path = path,
-            secure = secure
-        )
+        _cookies.add(Cookie(name, value, validFor, httpOnly, path, secure))
     }
 
-    internal fun build(): DonePluginConfiguration<USER> {
-        requireNotNull(this.generateToken) { "generateToken is required" }
-        return DonePluginConfiguration(
-            generateToken = this.generateToken!!,
-            tokenCookie = this.tokenCookie,
-        )
+    fun redirect(to: String) {
+        _redirectTo = to
     }
 }
 
-/**
- * State for the done / token generation step.
- *
- * @param token the generated auth token, or null initially.
- */
+data class Cookie(
+    val name: String,
+    val value: String,
+    val validFor: Duration,
+    val httpOnly: Boolean,
+    val path: String,
+    val secure: Boolean,
+)
+
+class DonePluginConfigurationBuilder<USER> {
+    private var onSuccess: OnSuccess<USER>? = null
+
+    fun onSuccess(block: OnSuccess<USER>) {
+        this.onSuccess = block
+    }
+
+    internal fun build(): DonePluginConfiguration<USER> {
+        requireNotNull(this.onSuccess) { "onSuccess callback is required" }
+        return DonePluginConfiguration(onSuccess = this.onSuccess!!)
+    }
+}
+
 data class DoneState(
-    val token: String?,
+    private val completed: Boolean = false,
 ) : BaseState {
-    override suspend fun isCompleted(): Boolean = this.token != null
+    override suspend fun isCompleted(): Boolean = completed
     override suspend fun createClientState(session: Session<*>): Map<String, Any?> = emptyMap()
 }
 
 internal data class DonePluginConfiguration<USER>(
-    val generateToken: GenerateToken<USER>,
-    val tokenCookie: TokenCookie?
-) {
-    typealias GenerateToken<USER> = suspend (session: Session<USER>, user: USER) -> String
+    val onSuccess: OnSuccess<USER>,
+)
 
-    data class TokenCookie(
-        val name: String,
-        val validFor: Duration,
-        val httpOnly: Boolean,
-        val path: String,
-        val secure: Boolean,
-    )
-}
+typealias OnSuccess<USER> = suspend DonePluginScope.(session: Session<USER>, user: USER) -> Unit
