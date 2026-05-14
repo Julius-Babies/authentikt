@@ -60,3 +60,4 @@ export { EmailUserSelectionPlugin } from "./user-selection/plugins/email/EmailUs
 export { default as EmailUserSelectionRenderer } from "./user-selection/plugins/email/EmailUserSelectionRenderer.svelte";
 export { DonePlugin } from "./plugins/done/DonePlugin.svelte";
 export { default as DoneRenderer } from "./plugins/done/DoneRenderer.svelte";
+export { useAuthentiktContext as useAuthentiktContext } from "./context.ts"

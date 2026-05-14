@@ -1,11 +1,6 @@
 <script lang="ts">
     import "./layout.css";
-    import Authentikt from "$lib/Authentikt.svelte";
-    import EmailUserSelectionRenderer from "$lib/user-selection/plugins/email/EmailUserSelectionRenderer.svelte";
-    import PasswordRenderer from "$lib/plugins/password/PasswordRenderer.svelte";
-    import TotpRenderer from "$lib/plugins/totp/TotpRenderer.svelte";
-    import DoneRenderer from "$lib/plugins/done/DoneRenderer.svelte";
-    import {useAuthentiktContext} from "$lib/context";
+    import {Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, DoneRenderer, useAuthentiktContext} from "$lib"
 
     import {Loader, X} from "@lucide/svelte";
     import {Button} from "$lib/components/ui/button";
