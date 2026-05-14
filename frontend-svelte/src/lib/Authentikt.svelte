@@ -16,7 +16,7 @@
 
     function correctBaseUrl(baseUrl: string) {
         if (baseUrl.endsWith("authentikt/")) return baseUrl;
-        if (authentikt_debug) console.warn("The base url is not correctly formatted. It should end with authentikt/. Automatically correcting it, but please update the base url to avoid this warning. This warning is only shown in debug mode.");
+        if (authentikt_debug) console.warn("The base URL is not correctly formatted. It should end with authentikt/. Automatically correcting it, but please update the base url to avoid this warning. This warning is only shown in debug mode.");
         if (baseUrl.endsWith("/")) return baseUrl + "authentikt/";
         return baseUrl + "/authentikt/";
     }
