@@ -8,6 +8,7 @@ import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
 import es.jvbabi.authentikt.core.userselection.plugins.builtin.EmailUserSelectionPlugin
 import io.ktor.http.*
+import io.ktor.util.AttributeKey
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -150,7 +151,7 @@ fun Application.module() {
     routing {
         get("/login") {
             val session = instance.createNewSession()
-            session.setPublicAttribute("auth_id", Random.nextInt(100000, 999999))
+            session.publicAttributes[AttributeKey<Int>("auth_id")] = Random.nextInt(100000, 999999)
             call.respond(buildMap {
                 put("session_id", session.sessionId)
             })
