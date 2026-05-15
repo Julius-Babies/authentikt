@@ -15,7 +15,9 @@ export interface AuthentiktConfiguration {
     /** Base URL of the authentikt server (e.g. `"http://localhost:8080/authentikt/"`). */
     baseUrl: string;
     /** Enable debug overlay showing live flow state. */
-    authentikt_debug?: boolean;
+    debug?: boolean | {
+        show_overlay: boolean;
+    };
 }
 
 /**
@@ -78,7 +80,7 @@ export class Authentikt {
 
     constructor(config: AuthentiktConfiguration) {
         this.baseUrl = new URL(config.baseUrl);
-        this.debug = config.authentikt_debug ?? false;
+        this.debug = !!config.debug;
 
         if (typeof window !== "undefined") {
             const currentUrl = new URL(window.location.href);

@@ -8,31 +8,35 @@
      * Props for the `<Authentikt>` provider component.
      */
     let {
-        baseUrl,
-        authentikt_debug = false,
+        config,
         children
-    }: AuthentiktConfiguration & {
+    }: {
+        config: AuthentiktConfiguration;
         children?: Snippet;
     } = $props();
 
     function correctBaseUrl(baseUrl: string) {
         if (baseUrl.endsWith("authentikt/")) return baseUrl;
-        if (authentikt_debug) console.warn("The base URL is not correctly formatted. It should end with authentikt/. Automatically correcting it, but please update the base url to avoid this warning. This warning is only shown in debug mode.");
+        if (config.debug) console.warn("The base URL is not correctly formatted. It should end with authentikt/. Automatically correcting it, but please update the base url to avoid this warning. This warning is only shown in debug mode.");
         if (baseUrl.endsWith("/")) return baseUrl + "authentikt/";
         return baseUrl + "/authentikt/";
     }
 
-    const correctedBaseUrl = $derived(correctBaseUrl(baseUrl));
+    const correctedBaseUrl = $derived(correctBaseUrl(config.baseUrl));
 
-    const instance = new Authentikt({
-        get baseUrl() { return correctedBaseUrl },
-        get authentikt_debug() { return authentikt_debug }
-    });
-    setAuthentiktContext(instance);
+    const instance = $derived(new Authentikt({...config, baseUrl: correctedBaseUrl}));
+    $effect(() => setAuthentiktContext(instance));
+
+    const showOverlay = $derived.by(() => {
+        if (typeof config.debug === 'boolean') {
+            return config.debug;
+        }
+        return !!config.debug?.show_overlay;
+    })
 </script>
 
 {@render children?.()}
 
-{#if authentikt_debug}
+{#if showOverlay}
     <AuthentiktDebug authentikt={instance} />
 {/if}
