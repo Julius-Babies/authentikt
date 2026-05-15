@@ -31,16 +31,21 @@
         void plugin.complete();
     });
 
-    $effect(async () => {
+    $effect(() => {
         const result = plugin.result;
         if (!result) return;
 
-        await authentikt.cancelFlow();
-        if (result.type === "redirect") {
-            window.location.href = result.to;
-        } else {
-            window.location.reload();
-        }
+        const delay = result.type === "redirect" ? 1000 : 2000;
+
+        const timeout = setTimeout(() => {
+            void authentikt.cancelFlow();
+            if (result.type === "redirect") {
+                window.location.href = result.to;
+            } else {
+                window.location.reload();
+            }
+        }, delay);
+
         return () => clearTimeout(timeout);
     });
 </script>
@@ -60,12 +65,12 @@
     {:else if plugin.result.type === "redirect"}
         <div class="flex flex-col items-center gap-4">
             <span class="text-green-600 font-bold">Successfully authenticated!</span>
-            <p>Redirecting to <a href={plugin.result.to} class="underline">{plugin.result.to}</a></p>
+            <p>Redirecting to <a href={plugin.result.to} class="underline">{plugin.result.to}</a> in 1 second...</p>
         </div>
     {:else}
         <div class="flex flex-col items-center gap-4">
             <span class="text-green-600 font-bold">Successfully authenticated!</span>
-            <p>You are being redirected...</p>
+            <p>Completing...</p>
         </div>
     {/if}
 {/if}
