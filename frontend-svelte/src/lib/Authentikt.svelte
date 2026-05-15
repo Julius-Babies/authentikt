@@ -22,10 +22,14 @@
         return baseUrl + "/authentikt/";
     }
 
+    let isReady = $state(false);
     const correctedBaseUrl = $derived(correctBaseUrl(config.baseUrl));
 
     const instance = $derived(new Authentikt({...config, baseUrl: correctedBaseUrl}));
-    $effect(() => setAuthentiktContext(instance));
+    $effect(() => {
+        setAuthentiktContext(instance);
+        isReady = true;
+    });
 
     const showOverlay = $derived.by(() => {
         if (typeof config.debug === 'boolean') {
@@ -35,7 +39,9 @@
     })
 </script>
 
-{@render children?.()}
+{#if isReady}
+    {@render children?.()}
+{/if}
 
 {#if showOverlay}
     <AuthentiktDebug authentikt={instance} />
