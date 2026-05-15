@@ -1,6 +1,9 @@
 <script lang="ts">
     import "./layout.css";
-    import {Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, DoneRenderer, useAuthentiktContext} from "$lib"
+    import {
+        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, DoneRenderer, useAuthentiktContext,
+        type AuthentiktConfiguration
+    } from "$lib"
 
     import {Loader, X} from "@lucide/svelte";
     import {Button} from "$lib/components/ui/button";
@@ -23,12 +26,18 @@
         });
         update_user();
     }
+
+    const config: AuthentiktConfiguration = {
+        baseUrl: "http://localhost:8080/authentikt/",
+        debug: {
+            show_overlay: true,
+        },
+    }
 </script>
 
 <div class="min-w-screen min-h-screen">
     <Authentikt
-        baseUrl="http://localhost:8080/authentikt/"
-        authentikt_debug={true}
+            config={config}
     >
         {@const authentikt = useAuthentiktContext()}
 

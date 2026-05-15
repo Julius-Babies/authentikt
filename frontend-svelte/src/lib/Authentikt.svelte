@@ -1,7 +1,7 @@
 <script lang="ts">
     import { setAuthentiktContext } from "./context";
     import { Authentikt, type AuthentiktConfiguration } from "./AuthentiktConfiguration.svelte";
-    import type { Snippet } from "svelte";
+    import {type Snippet, tick} from "svelte";
     import {AuthentiktDebug} from "$lib";
 
     /**
@@ -28,7 +28,7 @@
     const instance = $derived(new Authentikt({...config, baseUrl: correctedBaseUrl}));
     $effect(() => {
         setAuthentiktContext(instance);
-        isReady = true;
+        tick().then(() => isReady = true);
     });
 
     const showOverlay = $derived.by(() => {
