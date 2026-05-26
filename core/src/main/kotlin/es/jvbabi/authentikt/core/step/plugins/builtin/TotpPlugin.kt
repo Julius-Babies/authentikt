@@ -3,6 +3,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 import dev.turingcomplete.kotlinonetimepassword.HmacAlgorithm
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordConfig
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordGenerator
+import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -38,7 +39,7 @@ import kotlin.time.toJavaInstant
  */
 class TotpPlugin<USER>(
     configuration: TotpPluginConfigurationBuilder<USER>.() -> Unit,
-) : BasePlugin<TotpState>(
+) : BasePlugin<USER, TotpState>(
     namespace = "authentikt-builtin/totp"
 ) {
     private val configuration = TotpPluginConfigurationBuilder<USER>()
@@ -49,13 +50,13 @@ class TotpPlugin<USER>(
         return TotpState(isValidated = false)
     }
 
-    override fun installRoutes(inRoute: Route) {
+    override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
                 val request = call.receive<TotpRequest>()
-                val session = call.attributes[SessionKey]
+                val session = call.attributes[SessionKey] as Session<USER>
 
-                val success = configuration.check(session.identifiedUser!!.user as USER, request.totp)
+                val success = configuration.check(session.identifiedUser!!.user, request.totp)
 
                 if (success) {
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@TotpPlugin to TotpState(true)

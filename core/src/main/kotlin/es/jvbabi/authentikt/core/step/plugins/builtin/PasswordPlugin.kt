@@ -1,5 +1,6 @@
 package es.jvbabi.authentikt.core.step.plugins.builtin
 
+import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -28,7 +29,7 @@ import kotlinx.serialization.Serializable
  */
 class PasswordPlugin<USER>(
     configuration: PasswordPluginConfigurationBuilder<USER>.() -> Unit
-) : BasePlugin<PasswordState>(
+) : BasePlugin<USER, PasswordState>(
     namespace = "authentikt-builtin/password",
 ) {
     private val configuration = PasswordPluginConfigurationBuilder<USER>()
@@ -39,13 +40,13 @@ class PasswordPlugin<USER>(
         return PasswordState(false)
     }
 
-    override fun installRoutes(inRoute: Route) {
+    override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
                 val request = call.receive<PasswordRequest>()
-                val session = call.attributes[SessionKey]
+                val session = call.attributes[SessionKey] as Session<USER>
 
-                val isValid = configuration.checkPassword(session.identifiedUser!!.user as USER, request.password)
+                val isValid = configuration.checkPassword(session.identifiedUser!!.user, request.password)
 
                 if (isValid) {
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@PasswordPlugin to PasswordState(true)

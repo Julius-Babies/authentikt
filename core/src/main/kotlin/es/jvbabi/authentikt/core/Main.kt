@@ -89,7 +89,7 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
  *
  * Pair this backend with `authentikt-svelte`:
  * ```svelte
- * <Authentikt baseUrl="http://localhost:8080/api/v1/authentikt/">
+ * <Authentikt baseUrl="https://authentikt-lib.werkbank.space/api/v1/authentikt/">
  *   {@const auth = useAuthentiktContext()}
  *   {#if !auth.currentFlow}
  *     <button onclick={auth.startLoginFlow}>Login</button>
@@ -140,20 +140,12 @@ fun <USER> Application.installAuthentikt(
                         }
                     }.let { this@sessionScopedRoute.install(it) }
 
-                    route("/check") { checkFlowStatus(configuration) }
-
-                    route("/user-selection/plugins") {
-                        configuration.installedUserSelectionPlugins.forEach { plugin ->
-                            route("/${plugin.namespace}") pluginScopedRoute@{
-                                plugin.installRoutes(this@pluginScopedRoute, authentiktInstance)
-                            }
-                        }
-                    }
+                    route("/check") { checkFlowStatus<USER>() }
 
                     route("/steps/plugins") {
                         configuration.installedPlugins.forEach { plugin ->
                             route("/${plugin.namespace}") pluginScopedRoute@{
-                                plugin.installRoutes(this@pluginScopedRoute)
+                                plugin.installRoutes(this@pluginScopedRoute, authentiktInstance)
                             }
                         }
                     }
@@ -162,7 +154,7 @@ fun <USER> Application.installAuthentikt(
 
             route("/static") {
                 route("/plugins") {
-                    configuration.installedUserSelectionPlugins.forEach { plugin ->
+                    configuration.installedPlugins.forEach { plugin ->
                         route("/${plugin.namespace}") pluginScopedRoute@{
                             plugin.installStaticRoutes(this@pluginScopedRoute, authentiktInstance)
                         }

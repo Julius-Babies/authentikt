@@ -17,7 +17,7 @@
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/totp";
 
-    const selfPlugin = authentikt.registerStepPlugin<TotpPluginInstance>(
+    const selfPlugin = authentikt.registerPlugin<TotpPluginInstance>(
         namespace,
         TotpRenderer,
         (auth, ns) => new TotpPlugin(auth, ns)

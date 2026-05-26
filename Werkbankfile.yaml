@@ -10,5 +10,12 @@ services:
       local:
         port: 8080
 
+  - name: "frontend"
+    path_prefixes:
+      - /
+    modes:
+      local:
+        port: 5173
+
 dependencies:
   keycloak: true

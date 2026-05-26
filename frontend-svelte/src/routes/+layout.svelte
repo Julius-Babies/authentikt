@@ -1,7 +1,7 @@
 <script lang="ts">
     import "./layout.css";
     import {
-        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, DoneRenderer, useAuthentiktContext,
+        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, useAuthentiktContext,
         type AuthentiktConfiguration
     } from "$lib"
 
@@ -28,7 +28,7 @@
     }
 
     const config: AuthentiktConfiguration = {
-        baseUrl: "http://localhost:8080/authentikt/",
+        baseUrl: "https://authentikt-lib.werkbank.space/api/authentikt/",
         debug: {
             show_overlay: true,
         },
@@ -107,6 +107,8 @@
                     </PasswordRenderer>
 
                     <TotpRenderer />
+
+                    <OIDCRenderer />
 
                     <DoneRenderer />
                 </div>

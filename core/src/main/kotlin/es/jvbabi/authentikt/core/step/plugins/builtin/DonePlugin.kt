@@ -1,5 +1,6 @@
 package es.jvbabi.authentikt.core.step.plugins.builtin
 
+import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -11,7 +12,7 @@ import kotlin.time.Duration
 
 class DonePlugin<USER>(
     configuration: DonePluginConfigurationBuilder<USER>.() -> Unit,
-) : BasePlugin<DoneState>(
+) : BasePlugin<USER, DoneState>(
     namespace = "authentikt-builtin/done",
 ) {
     private val configuration = DonePluginConfigurationBuilder<USER>()
@@ -22,7 +23,7 @@ class DonePlugin<USER>(
         return DoneState()
     }
 
-    override fun installRoutes(inRoute: Route) {
+    override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             get {
                 val session = call.attributes[SessionKey] as Session<USER>

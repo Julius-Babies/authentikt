@@ -1,12 +1,11 @@
 package es.jvbabi.authentikt.core.config
 
-import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
-import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
+import io.ktor.http.*
 import java.io.File
 
-typealias FindNextStepCallback<USER> = suspend (session: Session<*>, user: AuthentiktUser<USER>) -> BasePlugin<*>
+typealias FindNextStepCallback<USER> = suspend (session: Session<USER>) -> BasePlugin<USER, *>
 
 /**
  * Holds the resolved configuration for an authentikt installation.
@@ -17,13 +16,12 @@ typealias FindNextStepCallback<USER> = suspend (session: Session<*>, user: Authe
  * @param baseUrl the base URL of the application (e.g. `https://example.com`). This does not include the [apiPrefix].
  * @param apiPrefix prefix prepended to all auth routes (e.g. `"/api/v1"`).
  * @param installedPlugins set of registered step plugins (password, TOTP, done, etc.).
- * @param installedUserSelectionPlugins set of registered user-selection plugins (email, username, etc.).
  */
 class AuthentiktConfiguration<USER>(
     val findNextStepCallback: FindNextStepCallback<USER>,
     val baseUrl: String,
+    val uiLoginBaseUrl: Url,
     val apiPrefix: String,
-    val installedPlugins: Set<BasePlugin<*>>,
-    val installedUserSelectionPlugins: Set<BaseUserSelectionPlugin<USER>>,
+    val installedPlugins: Set<BasePlugin<USER, *>>,
     val customSslCerts: List<File>,
 )

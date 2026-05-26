@@ -1,8 +1,10 @@
 package es.jvbabi.authentikt.core.step.plugins
 
+import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.BaseState
 import io.ktor.server.routing.Route
+import org.slf4j.LoggerFactory
 
 /**
  * Base class for pluggable authentication steps.
@@ -21,14 +23,16 @@ import io.ktor.server.routing.Route
  *   syntax (`com.example.authentikt.secure-auth`) or a group/project syntax
  *   like `example/secure-auth`.
  */
-abstract class BasePlugin<STATE : BaseState>(
+abstract class BasePlugin<USER, STATE : BaseState>(
     val namespace: String,
 ) {
+    protected val logger = LoggerFactory.getLogger(namespace)
+
     /**
      * Creates the initial state for this step when it is first entered.
      *
      * Called by the session when the authorization callback returns this plugin
- * as the next step.
+     * as the next step.
      *
      * @param session the active auth session.
      * @return a fresh [STATE] instance for this auth flow.
@@ -43,5 +47,12 @@ abstract class BasePlugin<STATE : BaseState>(
      *
      * @param inRoute the Ktor [Route] scoped to this plugin's namespace.
      */
-    abstract fun installRoutes(inRoute: Route)
+    abstract fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>)
+
+    /**
+     * Installs static routes that are not tied to a specific session.
+     *
+     * These routes are mounted under `/authentikt/static/plugins/{namespace}/`.
+     */
+    open fun installStaticRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {}
 }

@@ -125,7 +125,7 @@ npm install authentikt-svelte
   import { useAuthentiktContext } from "authentikt-svelte/context";
 </script>
 
-<Authentikt baseUrl="http://localhost:8080/api/v1/authentikt/">
+<Authentikt baseUrl="https://authentikt-lib.werkbank.space/api/v1/authentikt/">
   {@const auth = useAuthentiktContext()}
 
   {#if !auth.currentFlow}

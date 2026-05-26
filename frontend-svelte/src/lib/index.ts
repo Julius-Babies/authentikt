@@ -36,8 +36,7 @@ export type {
 export { default as Authentikt } from "./Authentikt.svelte";
 export { default as AuthentiktDebug } from "./AuthentiktDebug.svelte";
 
-export type { StepPluginLike, StepPluginComponentProps, StepPluginEntry } from "./plugins/StepPlugin.types";
-export type { UserSelectionPluginLike, UserSelectionPluginComponentProps, UserSelectionPluginEntry } from "./plugins/UserSelectionPlugin.types";
+export type { PluginLike, PluginComponentProps, PluginEntry } from "./plugins/Plugin.types";
 
 export type { PasswordStatus, PasswordSnippet, PasswordPluginInstance } from "./plugins/password/types";
 export type { TotpStatus, TotpSnippet, TotpPluginInstance } from "./plugins/totp/types";
@@ -58,4 +57,6 @@ export { EmailUserSelectionPlugin } from "./user-selection/plugins/email/EmailUs
 export { default as EmailUserSelectionRenderer } from "./user-selection/plugins/email/EmailUserSelectionRenderer.svelte";
 export { DonePlugin } from "./plugins/done/DonePlugin.svelte";
 export { default as DoneRenderer } from "./plugins/done/DoneRenderer.svelte";
+export { OIDCPlugin } from "./plugins/oidc/OIDCPlugin.svelte";
+export { default as OIDCRenderer } from "./plugins/oidc/OIDCRenderer.svelte";
 export { useAuthentiktContext as useAuthentiktContext } from "./context.ts"

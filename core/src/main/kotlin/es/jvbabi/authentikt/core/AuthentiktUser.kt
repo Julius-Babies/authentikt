@@ -15,7 +15,7 @@ abstract class AuthentiktUser<USER>(val user: USER) {
      * Returns the user's email address, or `null` if not available.
      *
      * Used by built-in user-selection plugins like
- * [es.jvbabi.authentikt.core.userselection.plugins.builtin.EmailUserSelectionPlugin].
+ * [es.jvbabi.authentikt.core.step.plugins.builtin.EmailUserSelectionPlugin].
      */
     abstract suspend fun getEmail(): String?
 

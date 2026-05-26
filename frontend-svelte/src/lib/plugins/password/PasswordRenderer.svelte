@@ -27,7 +27,7 @@
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/password";
 
-    const selfPlugin = authentikt.registerStepPlugin<PasswordPluginInstance>(
+    const selfPlugin = authentikt.registerPlugin<PasswordPluginInstance>(
         namespace,
         PasswordRenderer,
         (auth, ns) => new PasswordPlugin(auth, ns)

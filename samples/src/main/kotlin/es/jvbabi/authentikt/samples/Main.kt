@@ -2,13 +2,12 @@ package es.jvbabi.authentikt.samples
 
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.installAuthentikt
-import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
-import es.jvbabi.authentikt.core.userselection.plugins.builtin.EmailUserSelectionPlugin
-import es.jvbabi.authentikt.core.userselection.plugins.builtin.OIDCPlugin
-import es.jvbabi.authentikt.core.userselection.plugins.builtin.UserInfo
+import es.jvbabi.authentikt.core.step.plugins.builtin.EmailUserSelectionPlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.OIDCPlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.UserInfo
 import io.ktor.client.call.body
 import io.ktor.http.*
 import io.ktor.util.AttributeKey
@@ -108,12 +107,6 @@ fun Application.module() {
         }
 
         scopes("openid", "profile", "email")
-//        callbackUrl = baseUrl + callbackUrl
-//        tokenUrl = ""
-//        userInfoUrl = ""
-//        userInfoMapping { response: Map<String, String> ->
-//            response["email"]!!
-//        }
     }
 
     val donePlugin = DonePlugin<User> {
@@ -141,6 +134,7 @@ fun Application.module() {
     val instance = installAuthentikt {
         baseUrl = "https://authentikt-lib.werkbank.space"
         apiPrefix = "/api/"
+        uiLoginBaseUrl = "https://authentikt-lib.werkbank.space/"
         customSslCert("/Users/julius/.werkbank/certificates/rootCa.crt")
 
         install(emailUserSelectionPlugin)
@@ -150,7 +144,8 @@ fun Application.module() {
         install(totpPlugin)
         install(donePlugin)
 
-        authorization { session: Session<*>, user: AuthentiktUser<User> ->
+        authorization { session ->
+            val user = session.identifiedUser ?: return@authorization oauthPlugin
             if (!session.has(oauthPlugin)) {
                 if (!session.has(passwordPlugin)) return@authorization passwordPlugin
                 if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin

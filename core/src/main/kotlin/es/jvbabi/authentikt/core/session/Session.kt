@@ -53,7 +53,7 @@ class Session<USER>(
 
     var identifiedUser: AuthentiktUser<USER>? = null
 
-    val authenticationSteps = mutableListOf<Pair<BasePlugin<*>, BaseState>>()
+    val authenticationSteps = mutableListOf<Pair<BasePlugin<USER, *>, BaseState>>()
 
     private val _privateAttributes = mutableMapOf<AttributeKey<*>, Any?>()
     private val _publicAttributes = mutableMapOf<AttributeKey<*>, Any?>()
@@ -72,7 +72,7 @@ class Session<USER>(
      * @param plugin the plugin to check.
      * @param needsCompletion when `true`, only returns `true` if the step has completed.
      */
-    suspend fun has(plugin: BasePlugin<*>, needsCompletion: Boolean = true): Boolean {
+    suspend fun has(plugin: BasePlugin<USER, *>, needsCompletion: Boolean = true): Boolean {
         val stepForPlugin = this.authenticationSteps.firstOrNull { it.first == plugin } ?: return false
         return !needsCompletion || stepForPlugin.second.isCompleted()
     }
@@ -91,9 +91,7 @@ class Session<USER>(
      * @throws NotInstalledPluginCalled if the returned plugin was not installed.
      */
     suspend fun nextStep() {
-        val user = this.identifiedUser ?: return
-
-        val nextStep = configuration.findNextStepCallback(this, user)
+        val nextStep = configuration.findNextStepCallback(this)
 
         if (nextStep !in configuration.installedPlugins)
             throw NotInstalledPluginCalled(nextStep, this)

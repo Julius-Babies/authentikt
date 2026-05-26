@@ -22,7 +22,7 @@
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/email";
 
-    const selfPlugin = authentikt.registerUserSelectionPlugin<EmailUserSelectionPluginInstance>(
+    const selfPlugin = authentikt.registerPlugin<EmailUserSelectionPluginInstance>(
         namespace,
         EmailUserSelectionRenderer,
         (auth, ns, rp) => new EmailUserSelectionPlugin(auth, ns, rp ?? (() => payload))

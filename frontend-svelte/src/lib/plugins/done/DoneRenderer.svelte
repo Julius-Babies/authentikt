@@ -17,7 +17,7 @@
     const authentikt = useAuthentiktContext();
     const namespace = "authentikt-builtin/done";
 
-    const selfPlugin = authentikt.registerStepPlugin<DonePluginInstance>(
+    const selfPlugin = authentikt.registerPlugin<DonePluginInstance>(
         namespace,
         DoneRenderer,
         (auth, ns) => new DonePlugin(auth, ns)

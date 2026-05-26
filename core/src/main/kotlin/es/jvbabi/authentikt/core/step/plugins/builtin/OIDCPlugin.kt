@@ -1,10 +1,11 @@
-package es.jvbabi.authentikt.core.userselection.plugins.builtin
+package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.sessions
-import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
+import es.jvbabi.authentikt.core.step.BaseState
+import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.utils.customSsl
 import io.ktor.client.*
 import io.ktor.client.call.body
@@ -18,6 +19,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
@@ -26,7 +28,7 @@ import kotlinx.serialization.json.Json
 
 class OIDCPlugin<USER>(
     configuration: OIDCPluginConfigurationBuilder<USER>.() -> Unit,
-) : BaseUserSelectionPlugin<USER>(
+) : BasePlugin<USER, OIDCPluginState>(
     namespace = "authentikt-builtin/oidc"
 ) {
 
@@ -51,22 +53,28 @@ class OIDCPlugin<USER>(
                     val state = json.decodeFromString<OIDCState>(call.request.queryParameters["state"]!!)
                     val session = sessions[state.sessionId]!! as Session<USER>
                     val code = call.request.queryParameters["code"]!!
+                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@OIDCPlugin to (session.authenticationSteps[session.authenticationSteps.lastIndex].second as OIDCPluginState).copy(hasCompleted = true)
 
                     val tokenResponse = httpClient.post(configuration.tokenUrl) {
                         contentType(ContentType.Application.FormUrlEncoded)
-                        setBody(listOf(
-                            "client_id" to configuration.clientId,
-                            "client_secret" to configuration.clientSecret,
-                            "code" to code,
-                            "grant_type" to "authorization_code",
-                            "redirect_uri" to callbackUrl.toString(),
-                        ).formUrlEncode())
+                        setBody(
+                            listOf(
+                                "client_id" to configuration.clientId,
+                                "client_secret" to configuration.clientSecret,
+                                "code" to code,
+                                "grant_type" to "authorization_code",
+                                "redirect_uri" to callbackUrl.toString(),
+                            ).formUrlEncode()
+                        )
                     }
 
                     if (!tokenResponse.status.isSuccess()) {
                         println("Failed to exchange code for token: ${tokenResponse.status}")
                         println(tokenResponse.bodyAsText())
-                        call.respondText("Failed to exchange code for token", status = HttpStatusCode.InternalServerError)
+                        call.respondText(
+                            "Failed to exchange code for token",
+                            status = HttpStatusCode.InternalServerError
+                        )
                         return@get
                     }
 
@@ -87,7 +95,13 @@ class OIDCPlugin<USER>(
                     if (result is UserInfo.Result.Success) {
                         session.identifiedUser = result.user
                         session.nextStep()
-                        call.respondText("User identified")
+
+                        val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
+                            parameters.append("_authentikt_flow_active", "true")
+                            parameters.append("_authentikt_session_id", session.sessionId)
+                        }.build()
+
+                        call.respondRedirect(webUiRedirectUrl, permanent = false)
                     }
                 }.also { callbackRoute ->
                     callbackUrl = URLBuilder(authentiktInstance.configuration.baseUrl).apply {
@@ -100,15 +114,28 @@ class OIDCPlugin<USER>(
     }
 
     private val json = Json { prettyPrint = false; isLenient = true; ignoreUnknownKeys = true }
-    override suspend fun createClientState(session: Session<USER>): Map<String, Any?> {
+
+    override suspend fun createState(session: Session<*>): OIDCPluginState {
         val url = URLBuilder(configuration.authorizationEndpoint).apply {
             parameters.append("client_id", configuration.clientId)
             parameters.append("response_type", "code")
             parameters.append("scope", configuration.scopes.joinToString(" "))
             parameters.append("redirect_uri", callbackUrl.toString())
             parameters.append("state", json.encodeToString(OIDCState(session.sessionId)))
-        }
+        }.build()
+        return OIDCPluginState(url = url, hasCompleted = false)
+    }
+}
 
+data class OIDCPluginState(
+    val url: Url,
+    var hasCompleted: Boolean,
+) : BaseState {
+    override suspend fun isCompleted(): Boolean {
+        return hasCompleted
+    }
+
+    override suspend fun createClientState(session: Session<*>): Map<String, Any?> {
         return buildMap {
             put("authorize_url", url.toString())
         }

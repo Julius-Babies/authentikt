@@ -1,10 +1,5 @@
 import type {Component} from "svelte";
-import type {StepPluginEntry, StepPluginFactory, StepPluginLike} from "./plugins/StepPlugin.types";
-import type {
-    UserSelectionPluginEntry,
-    UserSelectionPluginFactory,
-    UserSelectionPluginLike
-} from "./plugins/UserSelectionPlugin.types";
+import type {PluginEntry, PluginFactory, PluginLike} from "./plugins/Plugin.types";
 import {replaceState} from "$app/navigation";
 import {page} from "$app/state";
 
@@ -59,8 +54,8 @@ export interface FlowState {
 /**
  * Core authentikt client instance.
  *
- * Manages the authentication flow state, a registry of step and user-selection
- * plugins, and lazy instantiation of plugin instances with Svelte 5 `$state` reactivity.
+ * Manages the authentication flow state, a registry of plugins,
+ * and lazy instantiation of plugin instances with Svelte 5 `$state` reactivity.
  *
  * Instantiated by the `<Authentikt>` component and provided to children via context.
  * Use `useAuthentiktContext()` to access it.
@@ -72,11 +67,8 @@ export class Authentikt {
     /** The current authentication flow state. `null` when no flow is active. */
     currentFlow = $state<FlowState | null>(null);
 
-    private _stepRegistry = $state<StepPluginEntry[]>([]);
-    private _userSelectionRegistry = $state<UserSelectionPluginEntry[]>([]);
-
-    private _stepInstances = new Map<string, StepPluginLike>();
-    private _userSelectionInstances = new Map<string, UserSelectionPluginLike>();
+    private _registry = $state<PluginEntry[]>([]);
+    private _instances = new Map<string, PluginLike>();
 
     constructor(config: AuthentiktConfiguration) {
         this.baseUrl = new URL(config.baseUrl);
@@ -93,7 +85,7 @@ export class Authentikt {
     }
 
     /**
-     * Registers a step plugin (password, TOTP, done, or custom).
+     * Registers a plugin by namespace.
      *
      * If the namespace is already registered, only the component is updated
      * (the existing plugin instance is preserved).
@@ -103,147 +95,91 @@ export class Authentikt {
      * @param factory - function that creates the plugin instance.
      * @returns the plugin instance (existing or freshly created).
      */
-    registerStepPlugin<T extends StepPluginLike>(
+    registerPlugin<T extends PluginLike>(
         namespace: string,
         component: Component<any>,
-        factory: StepPluginFactory,
+        factory: PluginFactory,
     ): T {
-        const existing = this._stepRegistry.findIndex(e => e.namespace === namespace);
+        const existing = this._registry.findIndex(e => e.namespace === namespace);
         if (existing !== -1) {
-            const next = [...this._stepRegistry];
+            const next = [...this._registry];
             next[existing] = { ...next[existing], component };
-            this._stepRegistry = next;
-            const cached = this._stepInstances.get(namespace) as T | undefined;
+            this._registry = next;
+            const cached = this._instances.get(namespace) as T | undefined;
             if (cached) return cached;
-            return this._createStepPluginInstance<T>(namespace);
+            return this._createPluginInstance<T>(namespace);
         }
 
-        this._stepRegistry = [...this._stepRegistry, { namespace, factory, component }];
-        return this._createStepPluginInstance<T>(namespace);
+        this._registry = [...this._registry, { namespace, factory, component }];
+        return this._createPluginInstance<T>(namespace);
     }
 
-    /**
-     * Registers a user-selection plugin (email, username, or custom).
-     *
-     * If the namespace is already registered, only the component is updated.
-     *
-     * @param namespace - unique identifier matching the server-side plugin.
-     * @param component - Svelte component that renders this plugin's UI.
-     * @param factory - function that creates the plugin instance, receiving an
-     *   optional `readPayload` callback for server-provided configuration.
-     * @returns the plugin instance (existing or freshly created).
-     */
-    registerUserSelectionPlugin<T extends UserSelectionPluginLike>(
-        namespace: string,
-        component: Component<any>,
-        factory: UserSelectionPluginFactory,
-    ): T {
-        const existing = this._userSelectionRegistry.findIndex(e => e.namespace === namespace);
-        if (existing !== -1) {
-            const next = [...this._userSelectionRegistry];
-            next[existing] = { ...next[existing], component };
-            this._userSelectionRegistry = next;
-            const cached = this._userSelectionInstances.get(namespace) as T | undefined;
-            if (cached) return cached;
-            return this._createUserSelectionPluginInstance<T>(namespace);
-        }
-
-        this._userSelectionRegistry = [...this._userSelectionRegistry, { namespace, factory, component }];
-        return this._createUserSelectionPluginInstance<T>(namespace);
-    }
-
-    private _createStepPluginInstance<T extends StepPluginLike>(namespace: string): T {
-        const entry = this._stepRegistry.find(e => e.namespace === namespace);
-        if (!entry) throw new Error(`No step plugin registered for namespace: ${namespace}`);
-        const instance = entry.factory(this, namespace) as T;
-        this._stepInstances.set(namespace, instance);
-        return instance;
-    }
-
-    private _createUserSelectionPluginInstance<T extends UserSelectionPluginLike>(
+    private _createPluginInstance<T extends PluginLike>(
         namespace: string,
         readPayload?: () => Record<string, unknown> | undefined,
     ): T {
-        const entry = this._userSelectionRegistry.find(e => e.namespace === namespace);
-        if (!entry) throw new Error(`No user selection plugin registered for namespace: ${namespace}`);
+        const entry = this._registry.find(e => e.namespace === namespace);
+        if (!entry) throw new Error(`No plugin registered for namespace: ${namespace}`);
         const instance = entry.factory(this, namespace, readPayload) as T;
-        this._userSelectionInstances.set(namespace, instance);
+        this._instances.set(namespace, instance);
         return instance;
     }
 
     /**
-     * Returns the step plugin instance for the given namespace,
-     * creating it lazily if it does not yet exist.
-     */
-    getStepPlugin<T extends StepPluginLike>(namespace: string): T {
-        const cached = this._stepInstances.get(namespace) as T | undefined;
-        if (cached) return cached;
-        return this._createStepPluginInstance<T>(namespace);
-    }
-
-    /**
-     * Returns the user-selection plugin instance for the given namespace,
+     * Returns the plugin instance for the given namespace,
      * creating it lazily if it does not yet exist.
      *
-     * @param readPayload - optional callback to read server-provided configuration
-     *   for this user-selection entry.
-     * @param namespace - the identifier of the plugin. Needs to be exactly the same
-     *   as the one used in the server-side configuration.
+     * @param namespace - the identifier of the plugin.
+     * @param readPayload - optional callback to read server-provided configuration.
      */
-    getUserSelectionPlugin<T extends UserSelectionPluginLike>(
+    getPlugin<T extends PluginLike>(
         namespace: string,
         readPayload?: () => Record<string, unknown> | undefined,
     ): T {
-        const cached = this._userSelectionInstances.get(namespace) as T | undefined;
+        const cached = this._instances.get(namespace) as T | undefined;
         if (cached) return cached;
-        return this._createUserSelectionPluginInstance<T>(namespace, readPayload);
+        return this._createPluginInstance<T>(namespace, readPayload);
     }
 
-    stepInstance(namespace: string): StepPluginLike | undefined {
-        return this._stepInstances.get(namespace);
-    }
-
-    userSelectionInstance(namespace: string): UserSelectionPluginLike | undefined {
-        return this._userSelectionInstances.get(namespace);
+    pluginInstance(namespace: string): PluginLike | undefined {
+        return this._instances.get(namespace);
     }
 
     /**
      * The registered entry for the currently active step, or `null`.
-     * Used internally by `<AuthentiktStepRenderer>`.
      */
     activeStepEntry = $derived.by(() => {
         const step = this.currentFlow?.step;
         if (step?.type !== "step") return null;
-        const entry = this._stepRegistry.find(e => e.namespace === step.namespace);
+        const entry = this._registry.find(e => e.namespace === step.namespace);
         if (!entry) return null;
         return entry;
     });
 
     /**
      * The plugin instance for the currently active step, or `null`.
-     * Used internally by `<AuthentiktStepRenderer>`.
      */
     activeStepPlugin = $derived.by(() => {
         const step = this.currentFlow?.step;
         if (step?.type !== "step") return null;
-        return this.getStepPlugin(step.namespace);
+        return this.getPlugin(step.namespace);
     });
 
     /**
      * Registered entries + plugin instances for the currently active user-selection
-     * step, or an empty array. Used internally by `<AuthentiktUserSelectionRenderer>`.
+     * step, or an empty array.
      */
     activeUserSelectionEntries = $derived.by(() => {
         const step = this.currentFlow?.step;
         if (step?.type !== "user_selection") return [];
         return step.plugins.map(candidate => {
-            const entry = this._userSelectionRegistry.find(e => e.namespace === candidate.namespace);
+            const entry = this._registry.find(e => e.namespace === candidate.namespace);
             if (!entry) return null;
-            const plugin = this.getUserSelectionPlugin(candidate.namespace, () => candidate.payload);
+            const plugin = this.getPlugin(candidate.namespace, () => candidate.payload);
             return { entry, plugin, payload: candidate.payload };
         }).filter(Boolean) as {
-            entry: UserSelectionPluginEntry;
-            plugin: UserSelectionPluginLike;
+            entry: PluginEntry;
+            plugin: PluginLike;
             payload?: Record<string, unknown>;
         }[];
     });
@@ -255,29 +191,29 @@ export class Authentikt {
         const step = this.currentFlow?.step;
         if (step?.type !== "user_selection") return [];
         return step.plugins.map(candidate => {
-            return this.getUserSelectionPlugin(candidate.namespace, () => candidate.payload);
-        }).filter(Boolean) as UserSelectionPluginLike[];
+            return this.getPlugin(candidate.namespace, () => candidate.payload);
+        }).filter(Boolean) as PluginLike[];
     });
 
     /**
-     * @deprecated Use [registerStepPlugin] instead. Kept for backward compatibility.
+     * @deprecated Use [registerPlugin] instead. Kept for backward compatibility.
      */
     linkStepPlugin<T>(namespace: string, component: Component<any>, createInstance: () => T): T {
-        return this.registerStepPlugin(
+        return this.registerPlugin(
             namespace,
             component,
-            (_auth, _ns) => createInstance() as unknown as StepPluginLike,
+            (_auth, _ns) => createInstance() as unknown as PluginLike,
         ) as T;
     }
 
     /**
-     * @deprecated Use [registerUserSelectionPlugin] instead. Kept for backward compatibility.
+     * @deprecated Use [registerPlugin] instead. Kept for backward compatibility.
      */
     linkUserSelectionPlugin<T>(namespace: string, component: Component<any>, createInstance: () => T): T {
-        return this.registerUserSelectionPlugin(
+        return this.registerPlugin(
             namespace,
             component,
-            (_auth, _ns, _rp) => createInstance() as unknown as UserSelectionPluginLike,
+            (_auth, _ns, _rp) => createInstance() as unknown as PluginLike,
         ) as T;
     }
 
@@ -287,10 +223,9 @@ export class Authentikt {
      * Clears any previously cached plugin instances and updates browser history.
      */
     startLoginFlow = async () => {
-        this._stepInstances.clear();
-        this._userSelectionInstances.clear();
+        this._instances.clear();
 
-        const startFlowUrl = new URL("/login", this.baseUrl);
+        const startFlowUrl = new URL("/api/login", this.baseUrl);
         const response = await fetch(startFlowUrl.toString());
         const data = await response.json();
         const session_id = data.session_id;
@@ -309,8 +244,7 @@ export class Authentikt {
      * Clears any previously cached plugin instances and updates browser history.
      */
     linkToFlow = async (session_id: string) => {
-        this._stepInstances.clear();
-        this._userSelectionInstances.clear();
+        this._instances.clear();
 
         const currentUrl = this.currentUrl();
         currentUrl.searchParams.set("_authentikt_flow_active", "true");
@@ -330,8 +264,7 @@ export class Authentikt {
         currentUrl.searchParams.delete("_authentikt_session_id");
         this.replaceBrowserUrl(currentUrl);
         this.currentFlow = null;
-        this._stepInstances.clear();
-        this._userSelectionInstances.clear();
+        this._instances.clear();
     }
 
     get sessionUrl(): URL {

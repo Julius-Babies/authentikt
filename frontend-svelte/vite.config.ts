@@ -4,5 +4,10 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
-	build: { sourcemap: true }
+	build: { sourcemap: true },
+	server: {
+		allowedHosts: [
+			"authentikt-lib.werkbank.space"
+		]
+	}
 });

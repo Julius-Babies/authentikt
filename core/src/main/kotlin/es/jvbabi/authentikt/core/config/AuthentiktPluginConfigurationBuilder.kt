@@ -1,8 +1,7 @@
 package es.jvbabi.authentikt.core.config
 
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
-import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
-import io.ktor.client.statement.HttpResponse
+import io.ktor.http.Url
 import java.io.File
 
 /**
@@ -24,9 +23,9 @@ class AuthentiktPluginConfigurationBuilder<USER> {
 
     var apiPrefix = ""
     var baseUrl = ""
+    var uiLoginBaseUrl = ""
     private var findNextStepCallback: FindNextStepCallback<USER>? = null
-    private val installedPlugins = mutableSetOf<BasePlugin<*>>()
-    private val installedUserSelectionPlugins = mutableSetOf<BaseUserSelectionPlugin<USER>>()
+    private val installedPlugins = mutableSetOf<BasePlugin<USER, *>>()
     private val customSslCerts = mutableListOf<File>()
 
     /**
@@ -46,17 +45,8 @@ class AuthentiktPluginConfigurationBuilder<USER> {
      * The plugin must have a unique [BasePlugin.namespace] that matches the
      * value returned by the authorization callback.
      */
-    fun install(plugin: BasePlugin<*>) {
+    fun install(plugin: BasePlugin<USER, *>) {
         installedPlugins.add(plugin)
-    }
-
-    /**
-     * Registers a user-selection plugin (email, username, or custom).
-     *
-     * At least one user-selection plugin must be installed.
-     */
-    fun install(plugin: BaseUserSelectionPlugin<USER>) {
-        installedUserSelectionPlugins.add(plugin)
     }
 
     fun customSslCert(cert: String) {
@@ -64,22 +54,20 @@ class AuthentiktPluginConfigurationBuilder<USER> {
     }
 
     internal fun build(): AuthentiktConfiguration<USER> {
-        require(installedUserSelectionPlugins.isNotEmpty()) {
-            "At least one user selection plugin must be installed"
-        }
         requireNotNull(this.findNextStepCallback) {
             "findNextStepCallback must be configured via authorization { ... }"
         }
         require(baseUrl.isNotEmpty()) { "baseUrl must be set" }
         require(customSslCerts.all { it.exists() }) { "customSslCerts must exist" }
+        require(uiLoginBaseUrl.isNotEmpty()) { "uiLoginBaseUrl must be set" }
 
         return AuthentiktConfiguration(
             findNextStepCallback = this.findNextStepCallback!!,
             apiPrefix = apiPrefix,
             installedPlugins = installedPlugins,
             baseUrl = baseUrl,
+            uiLoginBaseUrl = Url(uiLoginBaseUrl),
             customSslCerts = customSslCerts,
-            installedUserSelectionPlugins = installedUserSelectionPlugins,
         )
     }
 }

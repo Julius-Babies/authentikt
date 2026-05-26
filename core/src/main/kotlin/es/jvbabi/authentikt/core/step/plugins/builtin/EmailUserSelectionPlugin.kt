@@ -1,15 +1,15 @@
-package es.jvbabi.authentikt.core.userselection.plugins.builtin
+package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
-import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
+import es.jvbabi.authentikt.core.step.BaseState
+import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.utils.buildGenericMap
 import es.jvbabi.authentikt.core.utils.respondGson
-import io.ktor.server.request.receive
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.post
+import io.ktor.server.request.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -32,7 +32,7 @@ import kotlinx.serialization.Serializable
  */
 class EmailUserSelectionPlugin<USER>(
     configuration: EmailUserSelectionPluginConfigurationBuilder<USER>.() -> Unit,
-) : BaseUserSelectionPlugin<USER>(
+) : BasePlugin<USER, EmailSelectionPluginState>(
     namespace = "authentikt-builtin/email"
 ) {
     private val configuration = EmailUserSelectionPluginConfigurationBuilder<USER>()
@@ -55,6 +55,10 @@ class EmailUserSelectionPlugin<USER>(
 
                 val session = call.attributes[SessionKey] as Session<USER>
                 session.identifiedUser = user
+                session.authenticationSteps[session.authenticationSteps.lastIndex] = this@EmailUserSelectionPlugin to EmailSelectionPluginState(
+                    withUsername = configuration.withUsername,
+                    hasUser = true,
+                )
                 session.nextStep()
 
                 call.respondGson(buildGenericMap {
@@ -66,8 +70,24 @@ class EmailUserSelectionPlugin<USER>(
         }
     }
 
-    override suspend fun createClientState(session: Session<USER>): Map<String, Any?> = buildGenericMap {
-        put("with_username", configuration.withUsername)
+    override suspend fun createState(session: Session<*>): EmailSelectionPluginState {
+        return EmailSelectionPluginState(
+            withUsername = configuration.withUsername,
+            hasUser = session.identifiedUser != null,
+        )
+    }
+}
+
+data class EmailSelectionPluginState(
+    val withUsername: Boolean,
+    var hasUser: Boolean,
+): BaseState {
+    override suspend fun isCompleted(): Boolean {
+        return hasUser
+    }
+
+    override suspend fun createClientState(session: Session<*>): Map<String, Any?> = buildGenericMap {
+        put("with_username", this@EmailSelectionPluginState.withUsername)
     }
 }
 
