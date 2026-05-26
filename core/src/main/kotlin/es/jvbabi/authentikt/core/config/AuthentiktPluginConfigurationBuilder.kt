@@ -2,6 +2,8 @@ package es.jvbabi.authentikt.core.config
 
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
+import io.ktor.client.statement.HttpResponse
+import java.io.File
 
 /**
  * DSL builder used inside [es.jvbabi.authentikt.core.installAuthentikt]
@@ -21,9 +23,11 @@ import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
 class AuthentiktPluginConfigurationBuilder<USER> {
 
     var apiPrefix = ""
+    var baseUrl = ""
     private var findNextStepCallback: FindNextStepCallback<USER>? = null
     private val installedPlugins = mutableSetOf<BasePlugin<*>>()
     private val installedUserSelectionPlugins = mutableSetOf<BaseUserSelectionPlugin<USER>>()
+    private val customSslCerts = mutableListOf<File>()
 
     /**
      * Registers the callback that determines the next authentication step.
@@ -55,6 +59,10 @@ class AuthentiktPluginConfigurationBuilder<USER> {
         installedUserSelectionPlugins.add(plugin)
     }
 
+    fun customSslCert(cert: String) {
+        customSslCerts.add(File(cert))
+    }
+
     internal fun build(): AuthentiktConfiguration<USER> {
         require(installedUserSelectionPlugins.isNotEmpty()) {
             "At least one user selection plugin must be installed"
@@ -62,12 +70,17 @@ class AuthentiktPluginConfigurationBuilder<USER> {
         requireNotNull(this.findNextStepCallback) {
             "findNextStepCallback must be configured via authorization { ... }"
         }
+        require(baseUrl.isNotEmpty()) { "baseUrl must be set" }
+        require(customSslCerts.all { it.exists() }) { "customSslCerts must exist" }
 
         return AuthentiktConfiguration(
             findNextStepCallback = this.findNextStepCallback!!,
             apiPrefix = apiPrefix,
             installedPlugins = installedPlugins,
+            baseUrl = baseUrl,
+            customSslCerts = customSslCerts,
             installedUserSelectionPlugins = installedUserSelectionPlugins,
         )
     }
 }
+

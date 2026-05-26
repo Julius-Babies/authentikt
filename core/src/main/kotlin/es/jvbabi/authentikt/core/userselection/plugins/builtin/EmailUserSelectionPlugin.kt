@@ -1,5 +1,6 @@
 package es.jvbabi.authentikt.core.userselection.plugins.builtin
 
+import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
@@ -38,7 +39,7 @@ class EmailUserSelectionPlugin<USER>(
         .apply(configuration)
         .build()
 
-    override fun installRoutes(inRoute: Route) {
+    override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
                 val request = call.receive<LoginEmailRequest>()
@@ -65,7 +66,7 @@ class EmailUserSelectionPlugin<USER>(
         }
     }
 
-    override suspend fun createClientState(): Map<String, Any?> = buildGenericMap {
+    override suspend fun createClientState(session: Session<USER>): Map<String, Any?> = buildGenericMap {
         put("with_username", configuration.withUsername)
     }
 }

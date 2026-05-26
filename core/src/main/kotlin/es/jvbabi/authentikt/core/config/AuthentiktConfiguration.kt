@@ -4,6 +4,7 @@ import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.userselection.plugins.BaseUserSelectionPlugin
+import java.io.File
 
 typealias FindNextStepCallback<USER> = suspend (session: Session<*>, user: AuthentiktUser<USER>) -> BasePlugin<*>
 
@@ -13,13 +14,16 @@ typealias FindNextStepCallback<USER> = suspend (session: Session<*>, user: Authe
  * Created internally by [AuthentiktPluginConfigurationBuilder.build].
  *
  * @param findNextStepCallback determines which step plugin runs next for a given session and user.
+ * @param baseUrl the base URL of the application (e.g. `https://example.com`). This does not include the [apiPrefix].
  * @param apiPrefix prefix prepended to all auth routes (e.g. `"/api/v1"`).
  * @param installedPlugins set of registered step plugins (password, TOTP, done, etc.).
  * @param installedUserSelectionPlugins set of registered user-selection plugins (email, username, etc.).
  */
 class AuthentiktConfiguration<USER>(
     val findNextStepCallback: FindNextStepCallback<USER>,
+    val baseUrl: String,
     val apiPrefix: String,
     val installedPlugins: Set<BasePlugin<*>>,
     val installedUserSelectionPlugins: Set<BaseUserSelectionPlugin<USER>>,
+    val customSslCerts: List<File>,
 )

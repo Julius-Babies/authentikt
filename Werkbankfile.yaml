@@ -1,0 +1,14 @@
+project:
+  name: "Authentikt"
+  id: "authentikt-lib"
+
+services:
+  - name: "backend"
+    path_prefixes:
+      - "/api"
+    modes:
+      local:
+        port: 8080
+
+dependencies:
+  keycloak: true

@@ -126,6 +126,8 @@ fun <USER> Application.installAuthentikt(
     val configuration = builder.build()
     authentiktPluginConfiguration = configuration
 
+    val authentiktInstance = AuthentiktInstance(configuration)
+
     routing {
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
@@ -143,7 +145,7 @@ fun <USER> Application.installAuthentikt(
                     route("/user-selection/plugins") {
                         configuration.installedUserSelectionPlugins.forEach { plugin ->
                             route("/${plugin.namespace}") pluginScopedRoute@{
-                                plugin.installRoutes(this@pluginScopedRoute)
+                                plugin.installRoutes(this@pluginScopedRoute, authentiktInstance)
                             }
                         }
                     }
@@ -157,10 +159,18 @@ fun <USER> Application.installAuthentikt(
                     }
                 }
             }
+
+            route("/static") {
+                route("/plugins") {
+                    configuration.installedUserSelectionPlugins.forEach { plugin ->
+                        route("/${plugin.namespace}") pluginScopedRoute@{
+                            plugin.installStaticRoutes(this@pluginScopedRoute, authentiktInstance)
+                        }
+                    }
+                }
+            }
         }
     }
 
-    return AuthentiktInstance(
-        configuration = configuration,
-    )
+    return authentiktInstance
 }

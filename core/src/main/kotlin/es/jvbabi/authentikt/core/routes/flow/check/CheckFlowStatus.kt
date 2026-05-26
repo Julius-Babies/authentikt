@@ -20,7 +20,7 @@ internal fun <USER> Route.checkFlowStatus(configuration: AuthentiktConfiguration
                 put("plugins", configuration.installedUserSelectionPlugins.map { plugin ->
                     buildGenericMap {
                         put("namespace", plugin.namespace)
-                        put("payload", plugin.createClientState())
+                        put("payload", plugin.createClientState(session))
                     }
                 })
                 put("attributes", session.getPublicAttributes())

@@ -7,6 +7,9 @@ import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
 import es.jvbabi.authentikt.core.userselection.plugins.builtin.EmailUserSelectionPlugin
+import es.jvbabi.authentikt.core.userselection.plugins.builtin.OIDCPlugin
+import es.jvbabi.authentikt.core.userselection.plugins.builtin.UserInfo
+import io.ktor.client.call.body
 import io.ktor.http.*
 import io.ktor.util.AttributeKey
 import io.ktor.serialization.kotlinx.json.*
@@ -89,6 +92,30 @@ fun Application.module() {
         findUserByEmail { email -> users.find { it.email == email || it.username == email }?.toAuthentiktUser() }
     }
 
+    val oauthPlugin = OIDCPlugin {
+        clientId = "authentikt"
+        clientSecret = "HaUO49nsYZgT8hjWFE0qwnYw5ZK8IrYp"
+        authorizationEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/auth"
+        tokenEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/token"
+        userInfoEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/userinfo"
+
+        onUserInfo { response ->
+            val fields = response.body<Map<String, String>>()
+            val email = fields["email"]
+            val user = users.find { it.email == email }
+            if (user != null) return@onUserInfo UserInfo.Result.Success(user.toAuthentiktUser())
+            return@onUserInfo UserInfo.Result.Failure("User with email $email not found")
+        }
+
+        scopes("openid", "profile", "email")
+//        callbackUrl = baseUrl + callbackUrl
+//        tokenUrl = ""
+//        userInfoUrl = ""
+//        userInfoMapping { response: Map<String, String> ->
+//            response["email"]!!
+//        }
+    }
+
     val donePlugin = DonePlugin<User> {
         onSuccess { _, user ->
             cookie(
@@ -112,15 +139,22 @@ fun Application.module() {
     }
 
     val instance = installAuthentikt {
+        baseUrl = "https://authentikt-lib.werkbank.space"
+        apiPrefix = "/api/"
+        customSslCert("/Users/julius/.werkbank/certificates/rootCa.crt")
+
         install(emailUserSelectionPlugin)
+        install(oauthPlugin)
 
         install(passwordPlugin)
         install(totpPlugin)
         install(donePlugin)
 
         authorization { session: Session<*>, user: AuthentiktUser<User> ->
-            if (!session.has(passwordPlugin)) return@authorization passwordPlugin
-            if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
+            if (!session.has(oauthPlugin)) {
+                if (!session.has(passwordPlugin)) return@authorization passwordPlugin
+                if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
+            }
 
             return@authorization donePlugin
         }
@@ -149,12 +183,14 @@ fun Application.module() {
     }
 
     routing {
-        get("/login") {
-            val session = instance.createNewSession()
-            session.publicAttributes[AttributeKey<Int>("auth_id")] = Random.nextInt(100000, 999999)
-            call.respond(buildMap {
-                put("session_id", session.sessionId)
-            })
+        route("/api") {
+            get("/login") {
+                val session = instance.createNewSession()
+                session.publicAttributes[AttributeKey<Int>("auth_id")] = Random.nextInt(100000, 999999)
+                call.respond(buildMap {
+                    put("session_id", session.sessionId)
+                })
+            }
         }
 
         authenticate("authentikt") {

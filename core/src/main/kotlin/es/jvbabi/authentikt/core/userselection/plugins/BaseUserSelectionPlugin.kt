@@ -1,6 +1,9 @@
 package es.jvbabi.authentikt.core.userselection.plugins
 
+import es.jvbabi.authentikt.core.AuthentiktInstance
+import es.jvbabi.authentikt.core.session.Session
 import io.ktor.server.routing.Route
+import org.slf4j.LoggerFactory
 
 /**
  * Base class for pluggable user-identification strategies.
@@ -18,6 +21,8 @@ import io.ktor.server.routing.Route
 abstract class BaseUserSelectionPlugin<USER>(
     val namespace: String,
 ) {
+    protected val logger = LoggerFactory.getLogger(namespace)
+
     /**
      * Installs all Ktor routes required for this user-selection strategy.
      *
@@ -25,7 +30,14 @@ abstract class BaseUserSelectionPlugin<USER>(
      *
      * @param inRoute the Ktor [Route] scoped to this plugin's namespace.
      */
-    abstract fun installRoutes(inRoute: Route)
+    abstract fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>)
+
+    /**
+     * Installs static routes that are not tied to a specific session.
+     *
+     * These routes are mounted under `/authentikt/static/plugins/{namespace}/`.
+     */
+    open fun installStaticRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {}
 
     /**
      * Returns client-discoverable metadata about this user-selection step.
@@ -33,5 +45,5 @@ abstract class BaseUserSelectionPlugin<USER>(
      * The returned map is included in the flow-check response so that the frontend
      * can render the appropriate input fields.
      */
-    abstract suspend fun createClientState(): Map<String, Any?>
+    abstract suspend fun createClientState(session: Session<USER>): Map<String, Any?>
 }

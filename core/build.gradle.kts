@@ -13,8 +13,13 @@ repositories {
 
 dependencies {
     implementation(libs.ktor.server.core)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.ktor.client.content.negotiation)
     implementation(libs.kotlin.onetimepassword)
     implementation(libs.gson)
+    implementation(libs.kotlinx.serialization.json)
 }
 
 kotlin {
