@@ -10,7 +10,6 @@ export interface PluginLike {
 export type PluginFactory = (
     authentikt: Authentikt,
     namespace: string,
-    readPayload?: () => Record<string, unknown> | undefined,
 ) => PluginLike;
 
 export interface PluginComponentProps<T extends PluginLike = PluginLike> {

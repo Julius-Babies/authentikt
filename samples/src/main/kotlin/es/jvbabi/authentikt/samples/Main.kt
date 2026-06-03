@@ -144,11 +144,18 @@ fun Application.module() {
         install(totpPlugin)
         install(donePlugin)
 
+        val testOauth = false
+
         authorization { session ->
-            val user = session.identifiedUser ?: return@authorization oauthPlugin
-            if (!session.has(oauthPlugin)) {
+            val user = session.identifiedUser
+             if (!session.has(oauthPlugin) && testOauth) {
                 if (!session.has(passwordPlugin)) return@authorization passwordPlugin
-                if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
+                if (user != null && !session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
+            } else {
+                if (user == null) return@authorization emailUserSelectionPlugin
+                else if (!session.has(passwordPlugin)) return@authorization passwordPlugin
+                else if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
+                else return@authorization donePlugin
             }
 
             return@authorization donePlugin

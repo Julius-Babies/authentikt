@@ -6,23 +6,20 @@
  * ## Quick Start
  * ```svelte
  * <script>
- *   import { Authentikt, AuthentiktUserSelectionRenderer, AuthentiktStepRenderer } from "authentikt-svelte";
+ *   import { Authentikt, EmailUserSelectionRenderer, PasswordRenderer } from "authentikt-svelte";
  * </script>
  *
  * <Authentikt baseUrl="http://localhost:8080/authentikt/">
- *   <AuthentiktUserSelectionRenderer />
- *   <AuthentiktStepRenderer />
+ *   <EmailUserSelectionRenderer />
+ *   <PasswordRenderer />
  * </Authentikt>
  * ```
  *
  * ## Architecture
- * - **Plugin interfaces** (`StepPluginLike`, `UserSelectionPluginLike`) define the contract
- *   for authentication steps with Svelte 5 runes for reactive state.
+ * - **Plugin interfaces** (`PluginLike`) define the contract for authentication steps
+ *   with Svelte 5 runes for reactive state.
  * - **Plugin registry** on the `Authentikt` instance stores `{ namespace, factory, component }`
  *   entries. Plugins can be registered manually or via premade renderer components.
- * - **Auto-renderers** (`AuthentiktStepRenderer`, `AuthentiktUserSelectionRenderer`)
- *   look up the active step in the registry and render the appropriate component
- *   with the plugin instance and user context as props.
  * - **Premade renderers** (`PasswordRenderer`, `TotpRenderer`, etc.) self-register on mount
  *   and provide both default UI and overridable snippet-based customisation.
  */
@@ -45,7 +42,7 @@ export type {
     EmailUserSelectionSnippet,
     EmailUserSelectionPayload,
     EmailUserSelectionPluginInstance
-} from "./user-selection/plugins/email/types";
+} from "./plugins/email/types";
 
 export type { User } from "./user";
 
@@ -53,8 +50,8 @@ export { PasswordPlugin } from "./plugins/password/PasswordPlugin.svelte";
 export { default as PasswordRenderer } from "./plugins/password/PasswordRenderer.svelte";
 export { TotpPlugin } from "./plugins/totp/TotpPlugin.svelte";
 export { default as TotpRenderer } from "./plugins/totp/TotpRenderer.svelte";
-export { EmailUserSelectionPlugin } from "./user-selection/plugins/email/EmailUserSelectionPlugin.svelte";
-export { default as EmailUserSelectionRenderer } from "./user-selection/plugins/email/EmailUserSelectionRenderer.svelte";
+export { EmailUserSelectionPlugin } from "./plugins/email/EmailUserSelectionPlugin.svelte";
+export { default as EmailUserSelectionRenderer } from "./plugins/email/EmailUserSelectionRenderer.svelte";
 export { DonePlugin } from "./plugins/done/DonePlugin.svelte";
 export { default as DoneRenderer } from "./plugins/done/DoneRenderer.svelte";
 export { OIDCPlugin } from "./plugins/oidc/OIDCPlugin.svelte";

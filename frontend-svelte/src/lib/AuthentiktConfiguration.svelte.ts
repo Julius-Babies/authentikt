@@ -16,7 +16,7 @@ export interface AuthentiktConfiguration {
 }
 
 /**
- * Identified user returned by a user-selection step.
+ * Identified user returned by an identification step.
  */
 export interface FlowUserState {
     username: string;
@@ -28,12 +28,6 @@ export interface FlowUserState {
  * by the server's `/authentikt/flow/{sessionId}/check` endpoint.
  */
 export type FlowStepData = {
-    type: "user_selection",
-    plugins: {
-        namespace: string,
-        payload?: Record<string, unknown>,
-    }[]
-} | {
     type: "step";
     namespace: string;
     payload?: Record<string, unknown>;
@@ -116,11 +110,10 @@ export class Authentikt {
 
     private _createPluginInstance<T extends PluginLike>(
         namespace: string,
-        readPayload?: () => Record<string, unknown> | undefined,
     ): T {
         const entry = this._registry.find(e => e.namespace === namespace);
         if (!entry) throw new Error(`No plugin registered for namespace: ${namespace}`);
-        const instance = entry.factory(this, namespace, readPayload) as T;
+        const instance = entry.factory(this, namespace) as T;
         this._instances.set(namespace, instance);
         return instance;
     }
@@ -130,15 +123,13 @@ export class Authentikt {
      * creating it lazily if it does not yet exist.
      *
      * @param namespace - the identifier of the plugin.
-     * @param readPayload - optional callback to read server-provided configuration.
      */
     getPlugin<T extends PluginLike>(
         namespace: string,
-        readPayload?: () => Record<string, unknown> | undefined,
     ): T {
         const cached = this._instances.get(namespace) as T | undefined;
         if (cached) return cached;
-        return this._createPluginInstance<T>(namespace, readPayload);
+        return this._createPluginInstance<T>(namespace);
     }
 
     pluginInstance(namespace: string): PluginLike | undefined {
@@ -166,36 +157,6 @@ export class Authentikt {
     });
 
     /**
-     * Registered entries + plugin instances for the currently active user-selection
-     * step, or an empty array.
-     */
-    activeUserSelectionEntries = $derived.by(() => {
-        const step = this.currentFlow?.step;
-        if (step?.type !== "user_selection") return [];
-        return step.plugins.map(candidate => {
-            const entry = this._registry.find(e => e.namespace === candidate.namespace);
-            if (!entry) return null;
-            const plugin = this.getPlugin(candidate.namespace, () => candidate.payload);
-            return { entry, plugin, payload: candidate.payload };
-        }).filter(Boolean) as {
-            entry: PluginEntry;
-            plugin: PluginLike;
-            payload?: Record<string, unknown>;
-        }[];
-    });
-
-    /**
-     * Plugin instances for the currently active user-selection step, or an empty array.
-     */
-    activeUserSelectionPlugins = $derived.by(() => {
-        const step = this.currentFlow?.step;
-        if (step?.type !== "user_selection") return [];
-        return step.plugins.map(candidate => {
-            return this.getPlugin(candidate.namespace, () => candidate.payload);
-        }).filter(Boolean) as PluginLike[];
-    });
-
-    /**
      * @deprecated Use [registerPlugin] instead. Kept for backward compatibility.
      */
     linkStepPlugin<T>(namespace: string, component: Component<any>, createInstance: () => T): T {
@@ -203,17 +164,6 @@ export class Authentikt {
             namespace,
             component,
             (_auth, _ns) => createInstance() as unknown as PluginLike,
-        ) as T;
-    }
-
-    /**
-     * @deprecated Use [registerPlugin] instead. Kept for backward compatibility.
-     */
-    linkUserSelectionPlugin<T>(namespace: string, component: Component<any>, createInstance: () => T): T {
-        return this.registerPlugin(
-            namespace,
-            component,
-            (_auth, _ns, _rp) => createInstance() as unknown as PluginLike,
         ) as T;
     }
 
@@ -287,7 +237,6 @@ export class Authentikt {
 
     /**
      * Sets the identified user on the current flow state.
-     * Called by user-selection plugins after successful identification.
      */
     setUser = (user: FlowUserState | null): void => {
         if (this.currentFlow) {

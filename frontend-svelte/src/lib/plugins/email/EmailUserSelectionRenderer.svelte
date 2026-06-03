@@ -8,12 +8,10 @@
     import type { FlowUserState } from "$lib/AuthentiktConfiguration.svelte";
 
     let {
-        payload,
         children,
         plugin: externalPlugin,
         user: _user,
     }: {
-        payload?: Record<string, unknown>;
         children?: EmailUserSelectionSnippet;
         plugin?: EmailUserSelectionPluginInstance;
         user?: FlowUserState | null;
@@ -25,7 +23,7 @@
     const selfPlugin = authentikt.registerPlugin<EmailUserSelectionPluginInstance>(
         namespace,
         EmailUserSelectionRenderer,
-        (auth, ns, rp) => new EmailUserSelectionPlugin(auth, ns, rp ?? (() => payload))
+        (auth, ns) => new EmailUserSelectionPlugin(auth, ns)
     );
 
     const plugin = $derived(externalPlugin ?? selfPlugin);
