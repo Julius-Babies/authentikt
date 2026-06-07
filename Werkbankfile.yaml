@@ -4,18 +4,22 @@ project:
 
 services:
   - name: "backend"
-    path_prefixes:
-      - "/api"
     modes:
       local:
         port: 8080
 
   - name: "frontend"
-    path_prefixes:
-      - /
     modes:
       local:
         port: 5173
+
+http:
+  - path_prefixes:
+      - /api
+    target_service: backend
+  - path_prefixes:
+      - /
+    target_service: frontend
 
 dependencies:
   keycloak: true
