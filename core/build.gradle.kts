@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.maven.publish)
 }
 
-group = "es.jvbabi.authentikt"
+group = "io.github.julius-babies"
 
 repositories {
     mavenCentral()
