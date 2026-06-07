@@ -80,9 +80,10 @@
                 </Button>
 
                 <div class="relative w-full max-w-md p-4">
-                    {#if authentikt.currentFlow.destination.application_name}
+                    {#if authentikt.currentFlow.destination.type !== "none"}
+                        {@const dest = authentikt.currentFlow.destination}
                         <p class="text-sm text-muted-foreground text-center mb-4">
-                            Logging into <strong>{authentikt.currentFlow.destination.application_name}</strong>
+                            Logging into <strong>{dest.application_name}</strong>
                         </p>
                     {/if}
                     <EmailUserSelectionRenderer />
