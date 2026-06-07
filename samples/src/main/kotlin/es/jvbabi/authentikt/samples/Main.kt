@@ -101,7 +101,7 @@ fun Application.module() {
         tokenEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/token"
         userInfoEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/userinfo"
 
-        onUserInfo { response ->
+        onUserInfo { response, accessToken ->
             val fields = response.body<Map<String, String>>()
             val email = fields["email"]
             val user = users.find { it.email == email }

@@ -91,7 +91,7 @@ class OIDCPlugin<USER>(
                     }
 
 
-                    val result = configuration.onUserInfo(userResponse)
+                    val result = configuration.onUserInfo(userResponse, tokenResponseBody.accessToken)
                     if (result is UserInfo.Result.Success) {
                         session.identifiedUser = result.user
                         session.nextStep()
@@ -189,8 +189,8 @@ class OIDCPluginConfigurationBuilder<USER> {
 
     var applicationName = "default"
 
-    private var onUserInfo: (suspend (response: HttpResponse) -> UserInfo.Result<USER>)? = null
-    fun onUserInfo(block: suspend (response: HttpResponse) -> UserInfo.Result<USER>) {
+    private var onUserInfo: OIDCPluginConfiguration.OnUserInfo<USER>? = null
+    fun onUserInfo(block: OIDCPluginConfiguration.OnUserInfo<USER>) {
         onUserInfo = block
     }
 
@@ -225,8 +225,10 @@ internal data class OIDCPluginConfiguration<USER>(
     val authorizationEndpoint: Url,
     val tokenUrl: Url,
     val userInfoEndpoint: Url,
-    val onUserInfo: suspend (HttpResponse) -> UserInfo.Result<USER>,
-)
+    val onUserInfo: OnUserInfo<USER>,
+) {
+    typealias OnUserInfo<USER> = suspend (response: HttpResponse, accessToken: String) -> UserInfo.Result<USER>
+}
 
 @Serializable
 private data class OIDCTokenResponse(
