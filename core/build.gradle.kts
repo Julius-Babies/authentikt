@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.dokka)
-    `maven-publish`
+    alias(libs.plugins.maven.publish)
 }
 
 group = "es.jvbabi.authentikt"
@@ -40,47 +40,35 @@ tasks.test {
     useJUnitPlatform()
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("core") {
-            from(components["kotlin"])
-            artifact(sourcesJar)
-            artifactId = "authentikt-core"
-            pom {
-                name = "authentikt-core"
-                description = "Kotlin/Ktor multi-step authentication flow library"
-                url = "https://github.com/Julius-Babies/authentikt"
+mavenPublishing {
+    publishToMavenCentral()
+    if (!gradle.startParameter.taskNames.any { it.contains("publishToMavenLocal") }) {
+        signAllPublications()
+    }
+    coordinates(project.group.toString(), project.name, project.version.toString())
 
-                licenses {
-                    license {
-                        name = "MIT"
-                        url = "https://opensource.org/licenses/MIT"
-                    }
-                }
+    pom {
+        name = "authentikt-core"
+        description = "The Authentication framework for KTor"
+        url = "https://github.com/Julius-Babies/authentikt"
 
-                developers {
-                    developer {
-                        id = "Julius-Babies"
-                        name = "Julius Babies"
-                    }
-                }
-                scm {
-                    connection = "scm:git:git://github.com/Julius-Babies/authentikt.git"
-                    developerConnection = "scm:git:ssh://github.com/Julius-Babies/authentikt.git"
-                    url = "https://github.com/Julius-Babies/authentikt"
-                }
+        developers {
+            developer {
+                id = "julius-vincent-babies"
+                name = "Julius Vincent Babies"
+                email = "julvin.babies@gmail.com"
+                url = "https://github.com/Julius-Babies"
             }
         }
-    }
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/Julius-Babies/authentikt")
-            credentials {
-                username = project.findProperty("gpr.user") as String?
-                    ?: System.getenv("GITHUB_ACTOR")
-                password = project.findProperty("gpr.key") as String?
-                    ?: System.getenv("GITHUB_TOKEN")
+
+        scm {
+            url = "https://github.com/Julius-Babies/authentikt"
+        }
+
+        licenses {
+            license {
+                name = "The MIT License (MIT)"
+                url = "https://opensource.org/license/MIT"
             }
         }
     }

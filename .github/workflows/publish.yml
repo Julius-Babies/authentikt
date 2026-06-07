@@ -38,12 +38,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Publish to GitHub Packages
+      - name: Publish to Maven Central
         run: |
-          ./gradlew :core:publish \
-            -Pversion=${{ needs.version.outputs.semver }} \
-            -Pgpr.user=${{ github.actor }} \
-            -Pgpr.key=${{ secrets.GITHUB_TOKEN }}
+          ./gradlew :core:publishAndReleaseToMavenCentral \
+            -Pversion=${{ needs.version.outputs.semver }}
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_KEY_CONTENTS }}
 
   svelte:
     needs: version
@@ -74,8 +78,8 @@ jobs:
 
           # Configure GitHub Packages auth
           PATH="node_modules/.bin:$PATH"
-          echo "@Julius-Babies:registry=https://npm.pkg.github.com/" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+          echo "@Julius-Babies:registry=https://registry.npmjs.org/" > .npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
           bun run prepack
           bun publish
