@@ -1,7 +1,9 @@
 package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
+import es.jvbabi.authentikt.core.config.OAuthAccessToken
 import es.jvbabi.authentikt.core.session.Session
+import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
@@ -15,7 +17,7 @@ class DonePlugin<USER>(
 ) : BasePlugin<USER, DoneState>(
     namespace = "authentikt-builtin/done",
 ) {
-    private val configuration = DonePluginConfigurationBuilder<USER>()
+    internal val configuration = DonePluginConfigurationBuilder<USER>()
         .apply(configuration)
         .build()
 
@@ -27,6 +29,12 @@ class DonePlugin<USER>(
         with(inRoute) {
             get {
                 val session = call.attributes[SessionKey] as Session<USER>
+                if (session.destination is SessionDestination.DeviceFlow) {
+                    call.respondGson(buildGenericMap {
+                        put("type", "device_flow_success")
+                    })
+                    return@get
+                }
                 val user = session.identifiedUser!!.user
 
                 val step = session.authenticationSteps[session.authenticationSteps.lastIndex].second as DoneState
@@ -110,14 +118,22 @@ data class Cookie(
 
 class DonePluginConfigurationBuilder<USER> {
     private var onSuccess: OnSuccess<USER>? = null
+    private var onOAuthSuccess: OnOAuthSuccess<USER>? = null
 
     fun onSuccess(block: OnSuccess<USER>) {
         this.onSuccess = block
     }
 
+    fun onOAuthSuccess(block: OnOAuthSuccess<USER>) {
+        this.onOAuthSuccess = block
+    }
+
     internal fun build(): DonePluginConfiguration<USER> {
         requireNotNull(this.onSuccess) { "onSuccess callback is required" }
-        return DonePluginConfiguration(onSuccess = this.onSuccess!!)
+        return DonePluginConfiguration(
+            onSuccess = this.onSuccess!!,
+            onOAuthSuccess = this.onOAuthSuccess,
+        )
     }
 }
 
@@ -130,6 +146,8 @@ data class DoneState(
 
 internal data class DonePluginConfiguration<USER>(
     val onSuccess: OnSuccess<USER>,
+    val onOAuthSuccess: OnOAuthSuccess<USER>?,
 )
 
 typealias OnSuccess<USER> = suspend DonePluginScope.(session: Session<USER>, user: USER) -> Unit
+typealias OnOAuthSuccess<USER> = suspend (session: Session<USER>, user: USER) -> OAuthAccessToken

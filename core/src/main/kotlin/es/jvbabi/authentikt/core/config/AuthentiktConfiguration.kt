@@ -24,4 +24,5 @@ class AuthentiktConfiguration<USER>(
     val apiPrefix: String,
     val installedPlugins: Set<BasePlugin<USER, *>>,
     val customSslCerts: List<File>,
+    val oAuthConfiguration: OAuthConfiguration?,
 )

@@ -28,6 +28,12 @@ class AuthentiktPluginConfigurationBuilder<USER> {
     private val installedPlugins = mutableSetOf<BasePlugin<USER, *>>()
     private val customSslCerts = mutableListOf<File>()
 
+    private var oauthServerConfig: OAuthConfigurationBuilder<USER>? = null
+
+    fun oauth(block: OAuthConfigurationBuilder<USER>.() -> Unit) {
+        oauthServerConfig = OAuthConfigurationBuilder<USER>().apply(block)
+    }
+
     /**
      * Registers the callback that determines the next authentication step.
      *
@@ -68,6 +74,7 @@ class AuthentiktPluginConfigurationBuilder<USER> {
             baseUrl = baseUrl,
             uiLoginBaseUrl = Url(uiLoginBaseUrl),
             customSslCerts = customSslCerts,
+            oAuthConfiguration = this.oauthServerConfig?.build(),
         )
     }
 }

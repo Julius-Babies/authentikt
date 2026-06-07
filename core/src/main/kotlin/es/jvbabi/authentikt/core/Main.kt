@@ -1,12 +1,23 @@
 package es.jvbabi.authentikt.core
 
-import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
-import es.jvbabi.authentikt.core.config.AuthentiktPluginConfigurationBuilder
+import es.jvbabi.authentikt.core.config.*
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
+import es.jvbabi.authentikt.core.session.Session
+import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
+import es.jvbabi.authentikt.core.session.SessionDestination.OAuth
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.sessions
+import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.DoneState
+import es.jvbabi.authentikt.core.utils.buildGenericMap
+import es.jvbabi.authentikt.core.utils.respondGson
+import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
 
@@ -128,7 +139,176 @@ fun <USER> Application.installAuthentikt(
 
     val authentiktInstance = AuthentiktInstance(configuration)
 
+    val deviceCodePollTracker = mutableMapOf<String, Pair<Long, Long>>()
+
     routing {
+        if (configuration.oAuthConfiguration != null) {
+
+            val donePlugin = authentiktInstance.configuration.installedPlugins.find { it is DonePlugin<*> } as? DonePlugin<*>
+            requireNotNull(donePlugin) { "DonePlugin is required for OAuth flow" }
+            requireNotNull(donePlugin.configuration.onOAuthSuccess) { "onOAuthSuccess callback in DonePlugin is required for OAuth flow" }
+
+            route("/oauth") {
+                get("/authorize") {
+                    val clientId = call.parameters["client_id"]!!
+                    val redirectUri = call.parameters["redirect_uri"]!!
+                    when (val result = configuration.oAuthConfiguration.onAuthorize(clientId, redirectUri)) {
+                        is OAuthAuthorizationResult.Error -> call.respondText(
+                            result.error,
+                            status = HttpStatusCode.BadRequest
+                        )
+
+                        is OAuthAuthorizationResult.Application -> {
+                            val session = authentiktInstance.createNewSession(destination = OAuth(
+                                redirectUri = result.redirectUri,
+                                applicationId = result.clientId,
+                                applicationName = result.name,
+                            ))
+                            val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
+                                parameters.append("_authentikt_flow_active", "true")
+                                parameters.append("_authentikt_session_id", session.sessionId)
+                            }.build()
+
+                            call.respondRedirect(webUiRedirectUrl, permanent = false)
+                        }
+                    }
+                }
+
+                post("/token") {
+                    val params = call.receiveParameters()
+                    val grantType = params["grant_type"]!!
+
+                    when (grantType) {
+                        "urn:ietf:params:oauth:grant-type:device_code" -> {
+                            requireNotNull(configuration.oAuthConfiguration.onDeviceFlowAuthorize) { "Device flow is not enabled" }
+
+                            val deviceCode = params["device_code"]!!
+                            val clientId = params["client_id"]!!
+
+                            val now = System.currentTimeMillis()
+                            val pollState = deviceCodePollTracker[deviceCode]
+                            if (pollState != null) {
+                                val (lastPoll, interval) = pollState
+                                val elapsed = now - lastPoll
+                                if (elapsed < interval * 1000L) {
+                                    val newInterval = interval + 5
+                                    deviceCodePollTracker[deviceCode] = now to newInterval
+                                    call.respondGson(
+                                        value = buildGenericMap {
+                                            put("error", "slow_down")
+                                            put("error_description", "The client is polling too frequently.")
+                                        },
+                                        status = HttpStatusCode.BadRequest,
+                                    )
+                                    return@post
+                                }
+                            }
+                            deviceCodePollTracker[deviceCode] = now to (pollState?.second ?: 5L)
+
+                            val session = sessions.values.find { session -> session.destination is DeviceFlow && session.destination.deviceCode == deviceCode && session.destination.applicationId == clientId }
+                                as? Session<USER>
+                            if (session == null) {
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "expired_token")
+                                        put("error_description", "The device code is invalid or has expired.")
+                                    },
+                                    status = HttpStatusCode.BadRequest,
+                                )
+                                return@post
+                            }
+
+                            val lastStep = session.authenticationSteps.lastOrNull()
+
+                            if (lastStep?.first !is DonePlugin) {
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "authorization_pending")
+                                        put("error_description", "The authorization request is pending.")
+                                    },
+                                    status = HttpStatusCode.BadRequest,
+                                )
+                                return@post
+                            }
+
+                            val step = lastStep.first as DonePlugin<USER>
+                            val state = lastStep.second as DoneState
+                            if (state.isCompleted()) {
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "expired_token")
+                                        put("error_description", "The device code has already been used.")
+                                    },
+                                    status = HttpStatusCode.BadRequest,
+                                )
+                                return@post
+                            }
+
+                            requireNotNull(step.configuration.onOAuthSuccess) { "onOAuthSuccess callback is required for OAuth flow" }
+                            val accessToken = step.configuration.onOAuthSuccess(session, session.identifiedUser!!.user)
+                            session.authenticationSteps[session.authenticationSteps.lastIndex] = step to DoneState(completed = true)
+                            deviceCodePollTracker.remove(deviceCode)
+                            call.respondGson(
+                                buildGenericMap {
+                                    put("access_token", accessToken.accessToken)
+                                    put("token_type", "bearer")
+                                    put("expires_in", accessToken.expiresIn.inWholeSeconds)
+                                    put("refresh_token", accessToken.refreshToken)
+                                }
+                            )
+                        }
+
+                        else -> call.respondText(
+                            "Unsupported grant type",
+                            status = HttpStatusCode.BadRequest
+                        )
+                    }
+                }
+
+                if (configuration.oAuthConfiguration.onDeviceFlowAuthorize != null) {
+                    post("/device/code") {
+                        val body = call.receiveParameters()
+                        val clientId = body["client_id"]!!
+
+                        when (val result = configuration.oAuthConfiguration.onDeviceFlowAuthorize(
+                            ValidateDeviceFlowAuthorizationCallbackScope(),
+                            clientId
+                        )) {
+                            is OAuthDeviceFlowAuthorizationResult.Error -> call.respondText(
+                                result.error,
+                                status = HttpStatusCode.BadRequest
+                            )
+
+                            is OAuthDeviceFlowAuthorizationResult.Application -> {
+                                val session = authentiktInstance.createNewSession(
+                                    DeviceFlow(
+                                        deviceCode = result.deviceCode,
+                                        userCode = result.userCode,
+                                        applicationName = result.name,
+                                        applicationId = clientId,
+                                    )
+                                )
+
+                                call.respondGson(buildGenericMap {
+                                    val verificationUri = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
+                                        parameters.append("_authentikt_flow_active", "true")
+                                        parameters.append("_authentikt_session_id", session.sessionId)
+                                    }.buildString()
+
+                                    put("device_code", result.deviceCode)
+                                    put("user_code", result.userCode)
+                                    put("verification_uri", verificationUri)
+                                    put("verification_uri_complete", verificationUri)
+                                    put("expires_in", 10.minutes.inWholeSeconds)
+                                    put("interval", 5.seconds.inWholeSeconds)
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
                 route("/{sessionId}") sessionScopedRoute@{

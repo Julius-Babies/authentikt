@@ -35,6 +35,11 @@
         const result = plugin.result;
         if (!result) return;
 
+        if (result.type === "device_flow_success") {
+            void authentikt.cancelFlow();
+            return;
+        }
+
         const delay = result.type === "redirect" ? 1000 : 2000;
 
         const timeout = setTimeout(() => {
@@ -66,6 +71,11 @@
         <div class="flex flex-col items-center gap-4">
             <span class="text-green-600 font-bold">Successfully authenticated!</span>
             <p>Redirecting to <a href={plugin.result.to} class="underline">{plugin.result.to}</a> in 1 second...</p>
+        </div>
+    {:else if plugin.result.type === "device_flow_success"}
+        <div class="flex flex-col items-center gap-4">
+            <span class="text-green-600 font-bold">Successfully authenticated!</span>
+            <p>You can now return to your device.</p>
         </div>
     {:else}
         <div class="flex flex-col items-center gap-4">

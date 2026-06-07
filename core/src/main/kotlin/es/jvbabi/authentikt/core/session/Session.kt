@@ -47,7 +47,8 @@ val sessions = mutableMapOf<SessionId, Session<*>>()
  * @param configuration the resolved configuration for this session.
  */
 class Session<USER>(
-    private val configuration: AuthentiktConfiguration<USER>
+    private val configuration: AuthentiktConfiguration<USER>,
+    val destination: SessionDestination?,
 ) {
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 

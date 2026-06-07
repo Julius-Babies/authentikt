@@ -80,6 +80,11 @@
                 </Button>
 
                 <div class="relative w-full max-w-md p-4">
+                    {#if authentikt.currentFlow.destination.application_name}
+                        <p class="text-sm text-muted-foreground text-center mb-4">
+                            Logging into <strong>{authentikt.currentFlow.destination.application_name}</strong>
+                        </p>
+                    {/if}
                     <EmailUserSelectionRenderer />
 
                     <PasswordRenderer>

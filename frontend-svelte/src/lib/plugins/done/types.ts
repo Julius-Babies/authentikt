@@ -3,6 +3,7 @@ import type { Snippet } from "svelte";
 export type DoneResult =
     | { type: "success"; cookies?: string[] }
     | { type: "redirect"; to: string; cookies?: string[] }
+    | { type: "device_flow_success" }
     | null;
 
 export type DonePluginInstance = {

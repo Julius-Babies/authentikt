@@ -27,7 +27,8 @@ export type {
     AuthentiktConfiguration,
     FlowState,
     FlowStepData,
-    FlowUserState
+    FlowUserState,
+    FlowDestination,
 } from "./AuthentiktConfiguration.svelte";
 
 export { default as Authentikt } from "./Authentikt.svelte";

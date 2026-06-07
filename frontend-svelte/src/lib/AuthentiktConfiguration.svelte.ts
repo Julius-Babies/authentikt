@@ -35,6 +35,11 @@ export type FlowStepData = {
     type: "finished";
 }
 
+export type FlowDestination =
+    | { type: "none" }
+    | { type: "device_flow"; application_id: string; application_name: string }
+    | { type: "oauth"; application_id: string; application_name: string; redirect_uri: string };
+
 /**
  * Complete state of an active authentication flow.
  */
@@ -43,6 +48,7 @@ export interface FlowState {
     step: FlowStepData | null;
     user: FlowUserState | null;
     attributes: Record<string, unknown>;
+    destination: FlowDestination;
 }
 
 /**
@@ -72,7 +78,7 @@ export class Authentikt {
             const currentUrl = new URL(window.location.href);
             if (currentUrl.searchParams.get("_authentikt_flow_active") === "true") {
                 const session_id = currentUrl.searchParams.get("_authentikt_session_id");
-                this.currentFlow = { session_id: session_id ?? "", step: null, user: null, attributes: {} };
+                this.currentFlow = { session_id: session_id ?? "", step: null, user: null, attributes: {}, destination: { type: "none" } };
                 void this.updateState();
             }
         }
@@ -185,7 +191,7 @@ export class Authentikt {
         currentUrl.searchParams.set("_authentikt_session_id", session_id);
         this.replaceBrowserUrl(currentUrl);
 
-        this.currentFlow = { session_id, step: null, user: null, attributes: {} };
+        this.currentFlow = { session_id, step: null, user: null, attributes: {}, destination: { type: "none" } };
         await this.updateState();
     }
 
@@ -201,7 +207,7 @@ export class Authentikt {
         currentUrl.searchParams.set("_authentikt_session_id", session_id);
         this.replaceBrowserUrl(currentUrl);
 
-        this.currentFlow = { session_id, step: null, user: null, attributes: {} };
+        this.currentFlow = { session_id, step: null, user: null, attributes: {}, destination: { type: "none" } };
         await this.updateState();
     }
 
@@ -230,9 +236,10 @@ export class Authentikt {
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
         const data = await response.json();
-        const { attributes, ...stepData } = data;
+        const { attributes, destination, ...stepData } = data;
         this.currentFlow.step = stepData as FlowStepData;
         this.currentFlow.attributes = (attributes ?? {}) as Record<string, unknown>;
+        this.currentFlow.destination = (destination ?? { type: "none" }) as FlowDestination;
     }
 
     /**

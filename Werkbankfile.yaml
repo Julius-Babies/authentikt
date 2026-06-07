@@ -16,6 +16,7 @@ services:
 http:
   - path_prefixes:
       - /api
+      - /oauth
     target_service: backend
   - path_prefixes:
       - /

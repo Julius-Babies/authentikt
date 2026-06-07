@@ -1,16 +1,14 @@
 package es.jvbabi.authentikt.samples
 
 import es.jvbabi.authentikt.core.AuthentiktUser
+import es.jvbabi.authentikt.core.config.OAuthAccessToken
+import es.jvbabi.authentikt.core.config.OAuthAuthorizationResult
+import es.jvbabi.authentikt.core.config.OAuthDeviceFlowAuthorizationResult
 import es.jvbabi.authentikt.core.installAuthentikt
-import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.PasswordPlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.TotpPlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.EmailUserSelectionPlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.OIDCPlugin
-import es.jvbabi.authentikt.core.step.plugins.builtin.UserInfo
-import io.ktor.client.call.body
+import es.jvbabi.authentikt.core.session.SessionDestination
+import es.jvbabi.authentikt.core.step.plugins.builtin.*
+import io.ktor.client.call.*
 import io.ktor.http.*
-import io.ktor.util.AttributeKey
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -20,11 +18,16 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.defaultheaders.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.util.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import kotlin.uuid.Uuid
 
 data class User(
     val email: String,
@@ -71,11 +74,11 @@ fun Application.module() {
     }
 
     install(CORS) {
+        anyHost()
         anyMethod()
         allowHeader(HttpHeaders.ContentType)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.Cookie)
-        allowHost("localhost:5173")
     }
 
     install(DefaultHeaders) {
@@ -110,7 +113,8 @@ fun Application.module() {
     }
 
     val donePlugin = DonePlugin<User> {
-        onSuccess { _, user ->
+        onSuccess { session, user ->
+            if (session.destination is SessionDestination.DeviceFlow) return@onSuccess
             cookie(
                 name = "SessionToken",
                 value = "token-for-${user.email}",
@@ -118,6 +122,14 @@ fun Application.module() {
             )
 
             redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
+        }
+
+        onOAuthSuccess { session, user ->
+            return@onOAuthSuccess OAuthAccessToken(
+                "token-for-${user.email}",
+                null,
+                7.days,
+            )
         }
     }
 
@@ -143,6 +155,22 @@ fun Application.module() {
         install(passwordPlugin)
         install(totpPlugin)
         install(donePlugin)
+
+        oauth {
+            onAuthorize { clientId, redirectUri ->
+                OAuthAuthorizationResult.Application(clientId, redirectUri, "Authentikt TV App")
+            }
+
+            onDeviceFlow { clientId ->
+                if(clientId != "authentikt-tv-app") return@onDeviceFlow OAuthDeviceFlowAuthorizationResult.Error("Invalid client id")
+                OAuthDeviceFlowAuthorizationResult.Application(
+                    clientId,
+                    "Authentikt TV App",
+                    Uuid.random().toString(),
+                    generateUserCode()
+                )
+            }
+        }
 
         val testOauth = false
 
@@ -216,5 +244,10 @@ fun Application.module() {
                 call.respondText("Logged out")
             }
         }
+    }
+
+    launch {
+        delay(2.seconds)
+        oauthDeviceFlowTest()
     }
 }

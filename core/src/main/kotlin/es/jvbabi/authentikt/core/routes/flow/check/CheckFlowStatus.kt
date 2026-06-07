@@ -1,6 +1,7 @@
 package es.jvbabi.authentikt.core.routes.flow.check
 
 import es.jvbabi.authentikt.core.session.Session
+import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.utils.buildGenericMap
@@ -19,6 +20,24 @@ internal fun <USER> Route.checkFlowStatus() {
             put("namespace", stepForUser.namespace)
             put("payload", data.createClientState(session))
             put("attributes", session.getPublicAttributes())
+            put("destination", buildGenericMap {
+                when (session.destination) {
+                    null -> {
+                        put("type", "none")
+                    }
+                    is SessionDestination.DeviceFlow -> {
+                        put("type", "device_flow")
+                        put("application_id", session.destination.applicationId)
+                        put("application_name", session.destination.applicationName)
+                    }
+                    is SessionDestination.OAuth -> {
+                        put("type", "oauth")
+                        put("application_id", session.destination.applicationId)
+                        put("application_name", session.destination.applicationName)
+                        put("redirect_uri", session.destination.redirectUri)
+                    }
+                }
+            })
         })
     }
 }
