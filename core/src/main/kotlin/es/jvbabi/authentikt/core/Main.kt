@@ -149,7 +149,7 @@ fun <USER> Application.installAuthentikt(
             requireNotNull(donePlugin.configuration.onOAuthSuccess) { "onOAuthSuccess callback in DonePlugin is required for OAuth flow" }
 
             route("/oauth") {
-                get("/authorize") {
+                if (configuration.oAuthConfiguration.onAuthorize != null) get("/authorize") {
                     val clientId = call.parameters["client_id"]!!
                     val redirectUri = call.parameters["redirect_uri"]!!
                     when (val result = configuration.oAuthConfiguration.onAuthorize(clientId, redirectUri)) {

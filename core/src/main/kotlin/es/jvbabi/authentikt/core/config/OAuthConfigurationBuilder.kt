@@ -24,12 +24,9 @@ class OAuthConfigurationBuilder<USER> {
         this.onDeviceFlow = block
     }
 
-    internal fun build(): OAuthConfiguration? {
-        if (this.onAuthorize == null) return null
-        requireNotNull(this.onAuthorize) { "onAuthorize callback must be configured" }
-
+    internal fun build(): OAuthConfiguration {
         return OAuthConfiguration(
-            onAuthorize = this.onAuthorize!!,
+            onAuthorize = this.onAuthorize,
             onDeviceFlowAuthorize = this.onDeviceFlow,
         )
     }

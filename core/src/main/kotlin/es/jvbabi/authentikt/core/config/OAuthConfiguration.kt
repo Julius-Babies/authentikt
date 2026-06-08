@@ -3,7 +3,7 @@ package es.jvbabi.authentikt.core.config
 import kotlin.time.Duration
 
 class OAuthConfiguration(
-    val onAuthorize: OAuthConfigurationBuilder.ValidateAuthorizationCallback,
+    val onAuthorize: OAuthConfigurationBuilder.ValidateAuthorizationCallback?,
     val onDeviceFlowAuthorize: OAuthConfigurationBuilder.ValidateDeviceFlowAuthorizationCallback?,
 )
 
