@@ -9,8 +9,8 @@ import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.utils.buildGenericMap
 import es.jvbabi.authentikt.core.utils.respondGson
+import io.ktor.http.*
 import io.ktor.server.routing.*
-import kotlin.time.Duration
 
 class DonePlugin<USER>(
     configuration: DonePluginConfigurationBuilder<USER>.() -> Unit,
@@ -44,14 +44,7 @@ class DonePlugin<USER>(
                     configuration.onSuccess(scope, session, user)
 
                     for (cookie in scope.cookies) {
-                        call.response.cookies.append(
-                            name = cookie.name,
-                            value = cookie.value,
-                            maxAge = cookie.validFor.inWholeSeconds,
-                            secure = cookie.secure,
-                            httpOnly = cookie.httpOnly,
-                            path = cookie.path
-                        )
+                        call.response.cookies.append(cookie)
                     }
 
                     val cookieNames = scope.cookies.map { it.name }
@@ -92,29 +85,15 @@ class DonePluginScope {
     val redirectTo: String? get() = _redirectTo
 
     fun cookie(
-        name: String,
-        value: String,
-        validFor: Duration,
-        httpOnly: Boolean = true,
-        path: String = "/",
-        secure: Boolean = true,
+        cookie: Cookie
     ) {
-        _cookies.add(Cookie(name, value, validFor, httpOnly, path, secure))
+        _cookies.add(cookie)
     }
 
     fun redirect(to: String) {
         _redirectTo = to
     }
 }
-
-data class Cookie(
-    val name: String,
-    val value: String,
-    val validFor: Duration,
-    val httpOnly: Boolean,
-    val path: String,
-    val secure: Boolean,
-)
 
 class DonePluginConfigurationBuilder<USER> {
     private var onSuccess: OnSuccess<USER>? = null
