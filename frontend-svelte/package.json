@@ -31,9 +31,13 @@
 			"svelte": "./dist/index.js"
 		}
 	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Julius-Babies/authentikt.git",
+		"directory": "frontend-svelte"
+	},
 	"publishConfig": {
-		"access": "public",
-		"registry": "https://npm.pkg.github.com"
+		"access": "public"
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
