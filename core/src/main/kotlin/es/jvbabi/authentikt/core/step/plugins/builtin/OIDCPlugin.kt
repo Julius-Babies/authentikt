@@ -53,7 +53,6 @@ class OIDCPlugin<USER>(
                     val state = json.decodeFromString<OIDCState>(call.request.queryParameters["state"]!!)
                     val session = sessions[state.sessionId]!! as Session<USER>
                     val code = call.request.queryParameters["code"]!!
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@OIDCPlugin to (session.authenticationSteps[session.authenticationSteps.lastIndex].second as OIDCPluginState).copy(hasCompleted = true)
 
                     val tokenResponse = httpClient.post(configuration.tokenUrl) {
                         contentType(ContentType.Application.FormUrlEncoded)
@@ -92,16 +91,24 @@ class OIDCPlugin<USER>(
 
 
                     val result = configuration.onUserInfo(userResponse, tokenResponseBody.accessToken)
-                    if (result is UserInfo.Result.Success) {
-                        session.identifiedUser = result.user
-                        session.nextStep()
+                    when (result) {
+                        is UserInfo.Result.Success -> {
+                            session.authenticationSteps[session.authenticationSteps.lastIndex] = this@OIDCPlugin to (session.authenticationSteps[session.authenticationSteps.lastIndex].second as OIDCPluginState).copy(hasCompleted = true)
+                            session.identifiedUser = result.user
+                            session.nextStep()
 
-                        val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
-                            parameters.append("_authentikt_flow_active", "true")
-                            parameters.append("_authentikt_session_id", session.sessionId)
-                        }.build()
+                            val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
+                                parameters.append("_authentikt_flow_active", "true")
+                                parameters.append("_authentikt_session_id", session.sessionId)
+                            }.build()
 
-                        call.respondRedirect(webUiRedirectUrl, permanent = false)
+                            call.respondRedirect(webUiRedirectUrl, permanent = false)
+                        }
+
+                        is UserInfo.Result.Failure -> {
+                            logger.warn("Failed to load userinfo in session ${session.sessionId}: ${result.error}")
+                            call.respondText(result.error, status = HttpStatusCode.Unauthorized)
+                        }
                     }
                 }.also { callbackRoute ->
                     callbackUrl = URLBuilder(authentiktInstance.configuration.baseUrl).apply {
