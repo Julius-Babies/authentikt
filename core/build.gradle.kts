@@ -20,6 +20,9 @@ dependencies {
     implementation(libs.kotlin.onetimepassword)
     implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
+
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.ktor.server.test.host)
 }
 
 kotlin {

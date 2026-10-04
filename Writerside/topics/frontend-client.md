@@ -56,11 +56,12 @@ URL and loads the current step.
 
 `cancelFlow(): Promise<void>`
 : Removes the flow parameters from the URL, sets `currentFlow` to `null` and discards plugin instances. The server
-session is not deleted.
+session is not deleted; it expires on its own after the server's `sessionTimeout`.
 
 `updateState(): Promise<void>`
 : Requests `GET {sessionUrl}check` and updates `step`, `user`, `attributes` and `destination`. Plugins call it after a
-successful submission. Call it yourself if something outside the client advanced the flow.
+successful submission. Call it yourself if something outside the client advanced the flow. If the server answers
+with `404` because the session expired or was already completed, the flow is cancelled (see `cancelFlow()`).
 
 `setUser(user: FlowUserState | null): void`
 : Sets `currentFlow.user`. The email plugin calls it after identifying a user. `updateState()` also sets it from the

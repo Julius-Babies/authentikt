@@ -8,6 +8,7 @@ val authentikt: AuthentiktInstance<User> = installAuthentikt<User> {
     baseUrl = "https://myapplication.com"   // Where your application lives
     apiPrefix = "/api"                      // The sub-path your Ktor routes are served under
     uiLoginBaseUrl = "https://myapplication.com/login" // The page that hosts the Svelte login UI
+    sessionTimeout = 30.minutes             // Optional: how long an idle login may stay open
 
     install(emailPlugin)
     install(passwordPlugin)
@@ -34,6 +35,18 @@ build absolute URLs that external systems call back into, such as the OIDC redir
 : The URL of the page where `<Authentikt>` is mounted. authentikt redirects users there, with the session ID in the
 query string, after an OIDC login and for device flows. During development, this is often your Vite dev
 server, for example `http://localhost:5173/`.
+
+`sessionTimeout` (default: `30.minutes`)
+: How long a [session](sessions.md#storage-and-lifetime) may be inactive before it expires. Every request to a
+flow route resets the timer. Device flow sessions use
+[`deviceCodeLifetime`](oauth-device-flow.md#configuration) instead.
+
+`sessionCleanupInterval` (default: `1.minutes`)
+: How often a background job removes expired sessions from memory. Expired sessions are also rejected and removed
+when they are accessed, so this only affects memory usage.
+
+`clock` (default: `Clock.System`)
+: The `kotlin.time.Clock` used to determine whether a session has expired. Replace it in tests to control time.
 
 ## Functions
 
@@ -83,5 +96,8 @@ share the same in-memory session store. If you try it, use distinct `apiPrefix` 
 | `baseUrl must be set` | `baseUrl` is empty |
 | `uiLoginBaseUrl must be set` | `uiLoginBaseUrl` is empty |
 | `customSslCerts must exist` | A path passed to `customSslCert` does not exist |
+| `sessionTimeout must be positive` | `sessionTimeout` is zero or negative |
+| `sessionCleanupInterval must be positive` | `sessionCleanupInterval` is zero or negative |
+| `deviceCodeLifetime must be positive` | `deviceCodeLifetime` in `oauth { }` is zero or negative |
 | `DonePlugin is required for OAuth flow` | `oauth { }` is configured but no `DonePlugin` is installed |
 | `onOAuthSuccess callback in DonePlugin is required for OAuth flow` | `oauth { }` is configured but the `DonePlugin` has no `onOAuthSuccess` |

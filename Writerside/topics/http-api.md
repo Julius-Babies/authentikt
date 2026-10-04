@@ -95,6 +95,15 @@ A client should pick up these parameters on load and continue the flow with `che
 
 ## Errors
 
-The flow routes do not use a common error format yet. An unknown session ID currently causes a `500` response.
+The flow routes do not use a common error format yet. Requests for an unknown or
+[expired session](sessions.md#storage-and-lifetime) are answered with `404`:
+
+```json
+{
+  "error": "session_not_found",
+  "error_description": "The session does not exist or has expired."
+}
+```
+
 Validation failures (wrong password, unknown user) are returned with status `200` and a negative body, as listed
 above.

@@ -230,12 +230,19 @@ export class Authentikt {
     /**
      * Polls the server for the current flow state and updates `currentFlow.step`
      * and `currentFlow.user`.
+     *
+     * If the session no longer exists on the server (expired or already completed),
+     * the flow is cancelled.
      */
     updateState = async () => {
         if (!this.currentFlow) return;
 
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
+        if (response.status === 404) {
+            await this.cancelFlow();
+            return;
+        }
         const data = await response.json();
         const { attributes, destination, user, ...stepData } = data;
         this.currentFlow.step = stepData as FlowStepData;

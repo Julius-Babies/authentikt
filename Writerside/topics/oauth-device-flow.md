@@ -63,6 +63,17 @@ The OAuth routes are mounted at the **server root** (`/oauth/...`), not under `a
 Inside the block, `generateUserCode()` returns a random six-character code made of digits 1 to 9 and upper- and
 lowercase letters.
 
+`deviceCodeLifetime` (default: `10.minutes`)
+: How long the device code can be redeemed. It is sent to the device as `expires_in`. After that, the device flow
+session is removed and `POST /oauth/token` answers with `expired_token`. Inactivity does not shorten this lifetime.
+
+```kotlin
+oauth {
+    deviceCodeLifetime = 15.minutes
+    onDeviceFlow { clientId -> /* ... */ }
+}
+```
+
 ### Sequence
 
 ```mermaid
@@ -96,7 +107,7 @@ sequenceDiagram
 4. When the user reaches the `DonePlugin`, the browser gets `device_flow_success` and `onSuccess` is **not**
    called.
 5. The device's next poll of `POST /oauth/token` runs `onOAuthSuccess` and returns the token. The device code can
-   only be redeemed once.
+   only be redeemed once: the session is removed afterwards.
 
 On the login page, `auth.currentFlow.destination` contains the application name, so you can show "Signing in to
 ACME TV":
@@ -157,7 +168,7 @@ Error responses (status `400`), as defined by RFC 8628:
 |---------|---------|---------------------------|
 | `authorization_pending` | The user has not finished the login yet | Keep polling |
 | `slow_down` | The device polled faster than the current interval | Add 5 seconds to the interval and keep polling |
-| `expired_token` | Unknown device code, or already redeemed | Stop and start over |
+| `expired_token` | Unknown device code, already redeemed, or `deviceCodeLifetime` has passed | Stop and start over |
 
 Other grant types are answered with `400 Unsupported grant type`.
 

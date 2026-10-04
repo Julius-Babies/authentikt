@@ -25,6 +25,7 @@ import kotlinx.serialization.json.Json
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
@@ -149,6 +150,9 @@ fun Application.module() {
         uiLoginBaseUrl = "https://authentikt-lib.werkbank.space/"
         customSslCert("/Users/julius/.werkbank/certificates/rootCa.crt")
 
+        sessionTimeout = 15.minutes
+        sessionCleanupInterval = 1.minutes
+
         install(emailUserSelectionPlugin)
         install(oauthPlugin)
 
@@ -157,6 +161,8 @@ fun Application.module() {
         install(donePlugin)
 
         oauth {
+            deviceCodeLifetime = 10.minutes
+
             onAuthorize { clientId, redirectUri ->
                 OAuthAuthorizationResult.Application(clientId, redirectUri, "Authentikt TV App")
             }

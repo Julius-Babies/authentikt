@@ -50,6 +50,7 @@ class DonePlugin<USER>(
                     val cookieNames = scope.cookies.map { it.name }
 
                     session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
+                    session.invalidate()
 
                     if (scope.redirectTo != null) {
                         call.respondGson(buildGenericMap {
