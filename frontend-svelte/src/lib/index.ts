@@ -33,6 +33,8 @@ export type {
 
 export { default as Authentikt } from "./Authentikt.svelte";
 export { default as AuthentiktDebug } from "./AuthentiktDebug.svelte";
+export { default as AuthentiktAlternatives } from "./AuthentiktAlternatives.svelte";
+export type { AlternativeOption, AlternativesSnippet } from "./AuthentiktAlternatives.types";
 
 export type { PluginLike, PluginComponentProps, PluginEntry } from "./plugins/Plugin.types";
 
@@ -44,6 +46,8 @@ export type {
     EmailUserSelectionPayload,
     EmailUserSelectionPluginInstance
 } from "./plugins/email/types";
+
+export type { JunctionStatus, JunctionSnippet, JunctionPluginInstance } from "./plugins/junction/types";
 
 export type { User } from "./user";
 
@@ -57,4 +61,6 @@ export { DonePlugin } from "./plugins/done/DonePlugin.svelte";
 export { default as DoneRenderer } from "./plugins/done/DoneRenderer.svelte";
 export { OIDCPlugin } from "./plugins/oidc/OIDCPlugin.svelte";
 export { default as OIDCRenderer } from "./plugins/oidc/OIDCRenderer.svelte";
+export { JunctionPlugin } from "./plugins/junction/JunctionPlugin.svelte";
+export { default as JunctionRenderer } from "./plugins/junction/JunctionRenderer.svelte";
 export { useAuthentiktContext as useAuthentiktContext } from "./context.ts"

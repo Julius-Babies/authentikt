@@ -1,7 +1,8 @@
 <script lang="ts">
     import "./layout.css";
     import {
-        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, useAuthentiktContext,
+        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, JunctionRenderer,
+        AuthentiktAlternatives, useAuthentiktContext,
         type AuthentiktConfiguration
     } from "$lib"
 
@@ -86,6 +87,8 @@
                             Logging into <strong>{dest.application_name}</strong>
                         </p>
                     {/if}
+                    <JunctionRenderer />
+
                     <EmailUserSelectionRenderer />
 
                     <PasswordRenderer>
@@ -117,6 +120,9 @@
                     <OIDCRenderer />
 
                     <DoneRenderer />
+
+                    <!-- A real app would map namespaces to labels via the label prop; the demo shows the namespace -->
+                    <AuthentiktAlternatives />
                 </div>
             </div>
         {/if}
