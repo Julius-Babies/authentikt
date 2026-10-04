@@ -1,4 +1,4 @@
-import {currentUser} from "$lib/user.ts";
+import {currentUser} from "$lib/user";
 
 export default function () {
     fetch("https://authentikt-lib.wb.local/api/user/me", {
