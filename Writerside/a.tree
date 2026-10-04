@@ -36,6 +36,7 @@
         <toc-element topic="frontend-setup.md"/>
         <toc-element topic="frontend-client.md"/>
         <toc-element topic="frontend-renderers.md"/>
+        <toc-element topic="frontend-custom-component.md"/>
         <toc-element topic="frontend-custom-plugins.md"/>
         <toc-element topic="frontend-debugging.md"/>
     </toc-element>
