@@ -197,7 +197,8 @@ fun Application.module() {
                     selected alternative (identificationPlugins - selected)
                 }
                 session.has(oauthPlugin) -> donePlugin
-                !session.has(passwordPlugin) -> passwordPlugin
+                // Demo only: the done step is offered as an alternative to bypass the password
+                !session.has(passwordPlugin) -> passwordPlugin alternative listOf(donePlugin)
                 !session.has(totpPlugin) && user.user.otpSecret != null -> totpPlugin
                 else -> donePlugin
             }
