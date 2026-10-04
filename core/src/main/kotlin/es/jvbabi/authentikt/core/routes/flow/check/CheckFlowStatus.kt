@@ -20,6 +20,12 @@ internal fun <USER> Route.checkFlowStatus() {
             put("namespace", stepForUser.namespace)
             put("payload", data.createClientState(session))
             put("attributes", session.getPublicAttributes())
+            put("user", session.identifiedUser?.let { user ->
+                buildGenericMap {
+                    put("username", user.getUsername())
+                    put("display_name", user.getDisplayName())
+                }
+            })
             put("destination", buildGenericMap {
                 when (session.destination) {
                     null -> {

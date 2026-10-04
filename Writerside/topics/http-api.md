@@ -31,6 +31,7 @@ callback.
   "namespace": "authentikt-builtin/password",
   "payload": { "validated": false },
   "attributes": { "auth_id": 482913 },
+  "user": { "username": "eric", "display_name": "Eric Smith" },
   "destination": { "type": "none" }
 }
 ```
@@ -41,6 +42,7 @@ callback.
 | `namespace` | Namespace of the active step plugin |
 | `payload` | The step state's `createClientState()` |
 | `attributes` | The session's public attributes |
+| `user` | The identified user as `{ "username", "display_name" }`. Omitted until a user-selection step has identified a user |
 | `destination` | `{ "type": "none" }` or `{ "type": "device_flow", "application_id", "application_name" }` |
 
 The active step is always the last entered one. After the `DonePlugin` has run, `check` keeps returning it.

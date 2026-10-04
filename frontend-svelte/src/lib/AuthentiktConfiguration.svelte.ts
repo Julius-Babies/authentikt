@@ -228,7 +228,8 @@ export class Authentikt {
     }
 
     /**
-     * Polls the server for the current flow state and updates `currentFlow.step`.
+     * Polls the server for the current flow state and updates `currentFlow.step`
+     * and `currentFlow.user`.
      */
     updateState = async () => {
         if (!this.currentFlow) return;
@@ -236,8 +237,11 @@ export class Authentikt {
         const updateStateUrl = new URL("check", this.sessionUrl);
         const response = await fetch(updateStateUrl.toString());
         const data = await response.json();
-        const { attributes, destination, ...stepData } = data;
+        const { attributes, destination, user, ...stepData } = data;
         this.currentFlow.step = stepData as FlowStepData;
+        this.currentFlow.user = user
+            ? { username: user.username, displayName: user.display_name }
+            : null;
         this.currentFlow.attributes = (attributes ?? {}) as Record<string, unknown>;
         this.currentFlow.destination = (destination ?? { type: "none" }) as FlowDestination;
     }
