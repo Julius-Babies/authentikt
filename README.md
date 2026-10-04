@@ -41,5 +41,11 @@ npm run prepack
 
 ## Documentation
 
+📖 **[Documentation](https://julius-babies.github.io/authentikt/)**: guides for the Ktor server and the Svelte client, built-in plugins, HTTP API and known limitations.
+
+🔎 **[Kotlin API reference](https://julius-babies.github.io/authentikt/api/)**: generated with Dokka.
+
+To generate the API docs locally:
+
 - **Ktor API docs**: `./gradlew :core:dokkaGenerateHtml` → `core/build/dokka/html/index.html`
 - **Svelte API docs**: `cd frontend-svelte && npm run docs` → `frontend-svelte/docs/svelte/`

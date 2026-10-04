@@ -129,7 +129,10 @@ class SmsPlugin<USER>(
 
 ## Documentation
 
-Generate API docs with Dokka:
+- [Documentation](https://julius-babies.github.io/authentikt/)
+- [Kotlin API reference (Dokka)](https://julius-babies.github.io/authentikt/api/)
+
+Generate the API docs locally with Dokka:
 
 ```sh
 ./gradlew :core:dokkaGenerateHtml
