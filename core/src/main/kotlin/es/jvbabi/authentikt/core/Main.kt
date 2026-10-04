@@ -1,6 +1,7 @@
 package es.jvbabi.authentikt.core
 
 import es.jvbabi.authentikt.core.config.*
+import es.jvbabi.authentikt.core.routes.flow.alternatives.switchToAlternative
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
@@ -129,7 +130,8 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
  * POST /login                         → Creates session
  * GET  /flow/{id}/check               → { type: "user_selection", plugins: [...] }
  * POST /flow/{id}/user-selection/…    → Identifies user
- * GET  /flow/{id}/check               → { type: "step", namespace: "..." }
+ * GET  /flow/{id}/check               → { type: "step", namespace: "...", alternatives: [...] }
+ * POST /flow/{id}/alternatives        → Switches to an alternative of the active step (optional)
  * POST /flow/{id}/steps/plugins/…     → Validates step
  * … repeat …
  * GET  /flow/{id}/steps/plugins/done  → Generates token, ends the session
@@ -351,6 +353,7 @@ fun <USER> Application.installAuthentikt(
                     }.let { this@sessionScopedRoute.install(it) }
 
                     route("/check") { checkFlowStatus<USER>() }
+                    route("/alternatives") { switchToAlternative<USER>() }
 
                     route("/steps/plugins") {
                         configuration.installedPlugins.forEach { plugin ->

@@ -58,6 +58,9 @@ class AuthentiktPluginConfigurationBuilder<USER> {
  * This function is called after each step completes. It receives the current
  * session and the identified user, and must return the next [BasePlugin]
  * to execute. Return a [BasePlugin] that has been previously installed.
+ *
+ * Use [es.jvbabi.authentikt.core.step.plugins.alternative] to offer other
+ * installed steps the user can switch to instead.
      */
     fun authorization(block: FindNextStepCallback<USER>) {
         findNextStepCallback = block

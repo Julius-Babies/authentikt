@@ -18,6 +18,10 @@ import org.slf4j.LoggerFactory
  * - Installs Ktor routes via [installRoutes] that handle step-specific
  *   API calls (e.g. POST to validate credentials).
  *
+ * A plugin can be returned from the authorization callback directly, as it is a [NextStep] without alternatives.
+ * Plugins that need input from the authorization callback can offer an `operator fun invoke(...)` that
+ * starts the step with a prepared state via [prepare].
+ *
  * @param namespace A unique reference to the plugin that should at least be stable
  *   while the application is running. It is recommended to use a reverse-domain
  *   syntax (`com.example.authentikt.secure-auth`) or a group/project syntax
@@ -25,7 +29,7 @@ import org.slf4j.LoggerFactory
  */
 abstract class BasePlugin<USER, STATE : BaseState>(
     val namespace: String,
-) {
+) : StepEntry<USER> {
     protected val logger = LoggerFactory.getLogger(namespace)
 
     /**
@@ -38,6 +42,17 @@ abstract class BasePlugin<USER, STATE : BaseState>(
      * @return a fresh [STATE] instance for this auth flow.
      */
     abstract suspend fun createState(session: Session<*>): STATE
+
+    /**
+     * Starts this step with the state returned by [createState] instead of [BasePlugin.createState],
+     * like calling a constructor.
+     *
+     * ```kotlin
+     * operator fun invoke(options: List<StepEntry<USER>>): StepEntry<USER> = prepare { MyState(options) }
+     * ```
+     */
+    protected fun prepare(createState: suspend (session: Session<USER>) -> STATE): StepEntry<USER> =
+        PreparedStep(this, createState)
 
     /**
      * Installs all Ktor routes required by this plugin.
