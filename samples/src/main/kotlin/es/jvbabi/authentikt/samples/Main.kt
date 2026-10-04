@@ -7,6 +7,7 @@ import es.jvbabi.authentikt.core.config.OAuthDeviceFlowAuthorizationResult
 import es.jvbabi.authentikt.core.installAuthentikt
 import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.step.plugins.builtin.*
+import es.jvbabi.authentikt.core.step.plugins.alternative
 import io.ktor.client.call.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -117,9 +118,11 @@ fun Application.module() {
         onSuccess { session, user ->
             if (session.destination is SessionDestination.DeviceFlow) return@onSuccess
             cookie(
-                name = "SessionToken",
-                value = "token-for-${user.email}",
-                validFor = 60.days
+                Cookie(
+                    name = "SessionToken",
+                    value = "token-for-${user.email}",
+                    maxAge = 60.days.inWholeSeconds.toInt(),
+                )
             )
 
             redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
@@ -153,6 +156,12 @@ fun Application.module() {
         sessionTimeout = 15.minutes
         sessionCleanupInterval = 1.minutes
 
+        val identificationPlugins = listOf(emailUserSelectionPlugin, oauthPlugin)
+
+        // Lets the user choose how to identify before entering the selected step
+        val junctionPlugin = JunctionPlugin<User>()
+
+        install(junctionPlugin)
         install(emailUserSelectionPlugin)
         install(oauthPlugin)
 
@@ -178,21 +187,20 @@ fun Application.module() {
             }
         }
 
-        val testOauth = false
-
         authorization { session ->
             val user = session.identifiedUser
-             if (!session.has(oauthPlugin) && testOauth) {
-                if (!session.has(passwordPlugin)) return@authorization passwordPlugin
-                if (user != null && !session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
-            } else {
-                if (user == null) return@authorization emailUserSelectionPlugin
-                else if (!session.has(passwordPlugin)) return@authorization passwordPlugin
-                else if (!session.has(totpPlugin) && user.user.otpSecret != null) return@authorization totpPlugin
-                else return@authorization donePlugin
+            when {
+                !session.has(junctionPlugin) -> junctionPlugin(identificationPlugins)
+                user == null -> {
+                    // The other identification step is offered as an alternative to the selected one
+                    val selected = junctionPlugin.selectedOption(session)!!
+                    selected alternative (identificationPlugins - selected)
+                }
+                session.has(oauthPlugin) -> donePlugin
+                !session.has(passwordPlugin) -> passwordPlugin
+                !session.has(totpPlugin) && user.user.otpSecret != null -> totpPlugin
+                else -> donePlugin
             }
-
-            return@authorization donePlugin
         }
     }
 
