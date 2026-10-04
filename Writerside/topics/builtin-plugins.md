@@ -1,6 +1,6 @@
 # Built-in plugins
 
-authentikt ships with five step plugins. Each one has a matching renderer in authentikt-svelte.
+authentikt ships with six step plugins. Each one has a matching renderer in authentikt-svelte.
 
 | Plugin | Namespace | Role | Svelte renderer |
 |--------|-----------|------|-----------------|
@@ -8,6 +8,7 @@ authentikt ships with five step plugins. Each one has a matching renderer in aut
 | [](password-plugin.md) | `authentikt-builtin/password` | Verifies a password | `PasswordRenderer` |
 | [](totp-plugin.md) | `authentikt-builtin/totp` | Verifies a time-based one-time password | `TotpRenderer` |
 | [](oidc-plugin.md) | `authentikt-builtin/oidc` | Identifies the user through an external OpenID Connect provider | `OIDCRenderer` |
+| [](junction-plugin.md) | `authentikt-builtin/junction` | Lets the user choose which step to take next | `JunctionRenderer` |
 | [](done-plugin.md) | `authentikt-builtin/done` | Completes the flow and issues cookies, redirects or OAuth tokens | `DoneRenderer` |
 
 All plugins follow the same pattern:

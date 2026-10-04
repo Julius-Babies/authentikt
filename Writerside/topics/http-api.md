@@ -30,6 +30,7 @@ callback.
   "type": "step",
   "namespace": "authentikt-builtin/password",
   "payload": { "validated": false },
+  "alternatives": ["authentikt-builtin/oidc"],
   "attributes": { "auth_id": 482913 },
   "user": { "username": "eric", "display_name": "Eric Smith" },
   "destination": { "type": "none" }
@@ -41,12 +42,32 @@ callback.
 | `type` | Always `"step"` |
 | `namespace` | Namespace of the active step plugin |
 | `payload` | The step state's `createClientState()` |
+| `alternatives` | Namespaces of the steps the user can switch to instead of the active step. See [](step-order.md#alternatives) |
 | `attributes` | The session's public attributes |
 | `user` | The identified user as `{ "username", "display_name" }`. Omitted until a user-selection step has identified a user |
 | `destination` | `{ "type": "none" }` or `{ "type": "device_flow", "application_id", "application_name" }` |
 
 The active step is always the last entered one. After the `DonePlugin` has run, the session is removed and `check`
 answers with `404`. For device flows, this happens once the device has redeemed its code.
+
+## POST /flow/{sessionId}/alternatives
+
+Replaces the active step with one of its `alternatives`. The alternative starts with a fresh state, and the replaced
+step becomes an alternative itself.
+
+```json
+{ "namespace": "authentikt-builtin/oidc" }
+```
+
+The response is `{ "type": "success" }`. Call `check` afterwards to get the new step. If the namespace is not an
+alternative of the active step, for example because of a duplicate click, the server answers with `409 Conflict`:
+
+```json
+{
+  "error": "alternative_not_available",
+  "error_description": "The step is not an alternative of the active step."
+}
+```
 
 ## Step routes
 
@@ -58,6 +79,7 @@ Each plugin's routes are mounted under `/flow/{sessionId}/steps/plugins/{namespa
 | `authentikt-builtin/password` | `POST` | `{ "password": string }` | `{ "success": boolean }` |
 | `authentikt-builtin/totp` | `POST` | `{ "totp_code": string }` | `{ "success": boolean }` |
 | `authentikt-builtin/oidc` | none | | Redirect to `payload.authorize_url` instead |
+| `authentikt-builtin/junction` | `POST` | `{ "namespace": string }` | `{ "type": "success" }`, or `400` if the namespace is not an option |
 | `authentikt-builtin/done` | `GET` | | `{ "type": "success" \| "redirect" \| "device_flow_success", "to"?, "cookies"? }` |
 
 After a successful step submission, call `check` again to get the next step.

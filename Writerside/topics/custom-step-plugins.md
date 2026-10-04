@@ -70,6 +70,23 @@ session.completeStep(this@MyPlugin, MyState(completed = true)) { identifiedUser 
 
 Don't modify `session.authenticationSteps` directly. See [](sessions.md#concurrency).
 
+## Prepared state {id="prepared-state"}
+
+If your plugin needs input from the step-order callback, offer an `invoke` operator that starts the step with a
+prepared state. Use `prepare` from `BasePlugin`:
+
+```kotlin
+class SmsCodePlugin<USER> : BasePlugin<USER, SmsCodeState>(namespace = "acme/sms-code") {
+    operator fun invoke(phoneNumber: String): StepEntry<USER> =
+        prepare { SmsCodeState(phoneNumber = phoneNumber, validated = false) }
+
+    // createState is still used when the plugin is returned without arguments
+}
+```
+
+The callback can then return `smsCodePlugin(user.user.phoneNumber)`. The prepared state replaces `createState` for
+this entry, including when the user switches to it as an [alternative](step-order.md#alternatives).
+
 ## Example: terms of service
 
 ### State
