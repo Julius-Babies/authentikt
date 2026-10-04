@@ -5,6 +5,7 @@ import es.jvbabi.authentikt.core.config.OAuthAccessToken
 import es.jvbabi.authentikt.core.config.OAuthAuthorizationResult
 import es.jvbabi.authentikt.core.config.OAuthDeviceFlowAuthorizationResult
 import es.jvbabi.authentikt.core.installAuthentikt
+import es.jvbabi.authentikt.core.ratelimit.triesPer
 import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.step.plugins.builtin.*
 import es.jvbabi.authentikt.core.step.plugins.alternative
@@ -88,6 +89,7 @@ fun Application.module() {
     }
 
     val passwordPlugin = PasswordPlugin<User> {
+        rateLimit = 3 triesPer 3.minutes
         checkPassword { user, password -> user.password == password }
     }
 
