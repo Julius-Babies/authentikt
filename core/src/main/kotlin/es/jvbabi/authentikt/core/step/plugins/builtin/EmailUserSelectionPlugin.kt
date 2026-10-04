@@ -2,6 +2,10 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
+import es.jvbabi.authentikt.core.ratelimit.RateLimit
+import es.jvbabi.authentikt.core.ratelimit.RateLimiter
+import es.jvbabi.authentikt.core.ratelimit.respondRateLimited
+import es.jvbabi.authentikt.core.ratelimit.triesPer
 import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
@@ -13,6 +17,7 @@ import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Email-based user identification plugin.
@@ -21,9 +26,12 @@ import kotlinx.serialization.Serializable
  * by email via the configured `findUserByEmail` callback and sets the session's
  * identified user if found.
  *
+ * Lookups without a match are limited per session, see [EmailUserSelectionPluginConfigurationBuilder.rateLimit].
+ *
  * ### Usage
  * ```kotlin
  * install(EmailUserSelectionPlugin {
+ *     rateLimit = 10 triesPer 1.minutes
  *     findUserByEmail { email -> userRepository.findByEmail(email) }
  *     withUsername = true  // optionally request username after email
  * })
@@ -40,25 +48,39 @@ class EmailUserSelectionPlugin<USER>(
         .apply(configuration)
         .build()
 
+    private val rateLimiter = this.configuration.rateLimit?.let { RateLimiter.perSession(it) }
+
     override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
                 val session = call.attributes[SessionKey] as Session<USER>
                 if (!session.isActive(this@EmailUserSelectionPlugin)) return@post call.respondStepNotActive()
                 val request = call.receive<LoginEmailRequest>()
+
+                val attempt = rateLimiter?.tryAcquire(session)
+                if (attempt != null && !attempt.allowed) {
+                    return@post call.respondRateLimited(attempt.status, buildGenericMap { put("type", "rate_limited") })
+                }
+
                 val user = configuration.findUserByEmail(request.email)
 
                 if (user == null) {
                     call.respondGson(buildGenericMap {
                         put("type", "user_not_found")
+                        put("rate_limit", attempt?.status?.toClientState())
                     })
 
                     return@post
                 }
 
+                rateLimiter?.reset(session)
                 val completed = session.completeStep(
                     plugin = this@EmailUserSelectionPlugin,
-                    state = EmailSelectionPluginState(withUsername = configuration.withUsername, hasUser = true),
+                    state = EmailSelectionPluginState(
+                        withUsername = configuration.withUsername,
+                        hasUser = true,
+                        rateLimiter = rateLimiter,
+                    ),
                 ) { identifiedUser = user }
                 if (!completed) return@post call.respondStepNotActive()
 
@@ -75,13 +97,22 @@ class EmailUserSelectionPlugin<USER>(
         return EmailSelectionPluginState(
             withUsername = configuration.withUsername,
             hasUser = session.identifiedUser != null,
+            rateLimiter = rateLimiter,
         )
     }
 }
 
+/**
+ * State for the email step.
+ *
+ * @param withUsername whether the input also accepts a username.
+ * @param hasUser whether a user has been identified.
+ * @param rateLimiter limits lookups without a match, or `null` if lookups are not limited.
+ */
 data class EmailSelectionPluginState(
     val withUsername: Boolean,
     var hasUser: Boolean,
+    val rateLimiter: RateLimiter? = null,
 ): BaseState {
     override suspend fun isCompleted(): Boolean {
         return hasUser
@@ -89,6 +120,7 @@ data class EmailSelectionPluginState(
 
     override suspend fun createClientState(session: Session<*>): Map<String, Any?> = buildGenericMap {
         put("with_username", this@EmailSelectionPluginState.withUsername)
+        put("rate_limit", rateLimiter?.status(session)?.toClientState())
     }
 }
 
@@ -111,6 +143,12 @@ class EmailUserSelectionPluginConfigurationBuilder<USER> {
     private var findUserByEmail: FindUserByEmail<USER>? = null
 
     /**
+     * Lookups without a match allowed per session, e.g. `10 triesPer 1.minutes`. Defaults to 10 tries per minute.
+     * Set to `null` to disable the limit.
+     */
+    var rateLimit: RateLimit? = 10 triesPer 1.minutes
+
+    /**
      * Sets the email-to-user lookup callback.
      *
      * @param block suspending function that receives an email address and returns
@@ -126,6 +164,7 @@ class EmailUserSelectionPluginConfigurationBuilder<USER> {
         return EmailUserSelectionPluginConfiguration(
             withUsername = withUsername,
             findUserByEmail = findUserByEmail!!,
+            rateLimit = rateLimit,
         )
     }
 }
@@ -133,4 +172,5 @@ class EmailUserSelectionPluginConfigurationBuilder<USER> {
 internal data class EmailUserSelectionPluginConfiguration<USER>(
     val withUsername: Boolean,
     val findUserByEmail: EmailUserSelectionPluginConfigurationBuilder.FindUserByEmail<USER>,
+    val rateLimit: RateLimit?,
 )

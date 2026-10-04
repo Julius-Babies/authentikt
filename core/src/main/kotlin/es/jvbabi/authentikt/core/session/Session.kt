@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
@@ -112,6 +113,11 @@ class Session<USER>(
             is SessionDestination.DeviceFlow -> createdAt + configuration.oAuthConfiguration!!.deviceCodeLifetime
             else -> lastActivityAt + configuration.sessionTimeout
         }
+
+    /**
+     * The clock of the authentikt configuration.
+     */
+    internal val clock: Clock get() = configuration.clock
 
     fun isExpired(): Boolean = configuration.clock.now() >= expiresAt
 
