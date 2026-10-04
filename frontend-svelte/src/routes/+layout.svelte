@@ -2,7 +2,7 @@
     import "./layout.css";
     import {
         Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, JunctionRenderer,
-        AuthentiktAlternatives, useAuthentiktContext,
+        AuthentiktAlternatives, useAuthentiktContext, formatLockDuration,
         type AuthentiktConfiguration
     } from "$lib"
 
@@ -100,15 +100,24 @@
                                     <p class="text-xs text-gray-400">Session: {authentikt.currentFlow.attributes.auth_id}</p>
                                 {/if}
                                 <input
-                                    class="rounded border px-3 py-2"
+                                    class="rounded border px-3 py-2 disabled:opacity-50"
                                     type="password"
                                     placeholder="Password"
                                     bind:value={plugin.password}
+                                    disabled={plugin.rateLimit?.isLocked}
                                 />
-                                {#if plugin.status === "password_incorrect"}
-                                    <p class="text-sm text-red-600">Incorrect password. Please try again.</p>
+                                {#if plugin.rateLimit?.isLocked}
+                                    <p class="text-sm text-red-600">
+                                        Too many failed attempts. Try again in
+                                        {formatLockDuration(plugin.rateLimit.remainingLockSeconds)}.
+                                    </p>
+                                {:else if plugin.status === "password_incorrect"}
+                                    <p class="text-sm text-red-600">
+                                        Incorrect password. {plugin.rateLimit?.remainingTries} of
+                                        {plugin.rateLimit?.maxTries} attempts left.
+                                    </p>
                                 {/if}
-                                <Button onclick={plugin.submit} disabled={plugin.status === "loading"}>
+                                <Button onclick={plugin.submit} disabled={plugin.status === "loading" || plugin.rateLimit?.isLocked}>
                                     {plugin.status === "loading" ? "Checking..." : "Continue"}
                                 </Button>
                             </div>
