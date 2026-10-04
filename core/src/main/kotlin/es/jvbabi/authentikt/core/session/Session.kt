@@ -5,6 +5,10 @@ import es.jvbabi.authentikt.core.config.AuthentiktConfiguration
 import es.jvbabi.authentikt.core.routes.flow.check.NotInstalledPluginCalled
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
+import es.jvbabi.authentikt.core.step.plugins.StepEntry
+import es.jvbabi.authentikt.core.step.plugins.StepWithAlternatives
+import es.jvbabi.authentikt.core.step.plugins.createInitialState
+import es.jvbabi.authentikt.core.step.plugins.plugin
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -71,6 +75,7 @@ internal fun removeExpiredSessions() {
  * It tracks:
  * - The identified user ([identifiedUser]) once a user-selection step completes.
  * - A stack of completed authentication steps ([authenticationSteps]).
+ * - The [alternatives] the user can switch to instead of the active step.
  * - Its lifetime ([createdAt], [lastActivityAt], [expiresAt]).
  *
  * Regular sessions expire after [AuthentiktConfiguration.sessionTimeout] without activity.
@@ -79,8 +84,8 @@ internal fun removeExpiredSessions() {
  *
  * ## Concurrency
  * Several requests for the same session can run at the same time. Step transitions are serialized by
- * [completeStep], which only advances the flow if the step is still active. Use it instead of modifying
- * [authenticationSteps] directly.
+ * [completeStep], which only advances the flow if the step is still active, and [switchToAlternative]. Use them
+ * instead of modifying [authenticationSteps] directly.
  *
  * @param configuration the resolved configuration for this session.
  */
@@ -133,6 +138,36 @@ class Session<USER>(
      */
     val authenticationSteps: MutableList<Pair<BasePlugin<USER, *>, BaseState>> = CopyOnWriteArrayList()
 
+    /**
+     * The active step and its alternatives, in the order returned by the authorization callback.
+     *
+     * @param active index of the entry that is currently on top of [authenticationSteps].
+     */
+    private class StepOptions<USER>(val entries: List<StepEntry<USER>>, val active: Int)
+
+    @Volatile
+    private var stepOptions: StepOptions<USER>? = null
+
+    /**
+     * Returns the options of the active step, or `null` if it was not entered with alternatives.
+     */
+    private fun activeStepOptions(): StepOptions<USER>? {
+        val options = stepOptions ?: return null
+        val activeStep = authenticationSteps.lastOrNull()?.first ?: return null
+        // Options are only valid for the step they were returned with
+        if (options.entries[options.active].plugin != activeStep) return null
+        return options
+    }
+
+    /**
+     * Steps the user can switch to instead of the active step, see [switchToAlternative].
+     */
+    val alternatives: List<BasePlugin<USER, *>>
+        get() {
+            val options = activeStepOptions() ?: return emptyList()
+            return options.entries.filterIndexed { index, _ -> index != options.active }.map { it.plugin }
+        }
+
     private val _privateAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
     private val _publicAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
 
@@ -183,27 +218,53 @@ class Session<USER>(
         true
     }
 
+    /**
+     * Replaces the active step with the alternative of the given [namespace], atomically with respect to other
+     * requests for this session.
+     *
+     * The replaced step becomes an alternative itself, so the user can switch back.
+     *
+     * @return `true` if the step was switched, `false` if [namespace] is not an alternative of the active step.
+     */
+    suspend fun switchToAlternative(namespace: String): Boolean = withLock {
+        val options = activeStepOptions() ?: return@withLock false
+        val index = options.entries.indices.firstOrNull { index ->
+            index != options.active && options.entries[index].plugin.namespace == namespace
+        } ?: return@withLock false
+
+        val entry = options.entries[index]
+        authenticationSteps[authenticationSteps.lastIndex] = entry.plugin to entry.createInitialState(this)
+        stepOptions = StepOptions(options.entries, index)
+        true
+    }
+
     fun pop() {
         if (authenticationSteps.isEmpty()) identifiedUser = null
         else authenticationSteps.removeLast()
+        stepOptions = null
     }
 
     /**
      * Advances the flow to the next step.
      *
-     * Calls the configured authorization callback to determine the next plugin,
+     * Calls the configured authorization callback to determine the next plugin and its alternatives,
      * creates its initial state, and pushes it onto the step stack.
      *
-     * @throws NotInstalledPluginCalled if the returned plugin was not installed.
+     * @throws NotInstalledPluginCalled if the returned plugin or one of its alternatives was not installed.
      */
     suspend fun nextStep() {
-        val nextStep = configuration.findNextStepCallback(this)
+        val entries = when (val result = configuration.findNextStepCallback(this)) {
+            is StepEntry<USER> -> listOf(result)
+            is StepWithAlternatives<USER> -> (listOf(result.step) + result.alternatives).distinctBy { it.plugin }
+        }
 
-        if (nextStep !in configuration.installedPlugins)
-            throw NotInstalledPluginCalled(nextStep, this)
+        entries.firstOrNull { it.plugin !in configuration.installedPlugins }
+            ?.let { throw NotInstalledPluginCalled(it.plugin, this) }
 
-        val data = nextStep.createState(this)
-        this.authenticationSteps.add(nextStep to data)
+        val nextStep = entries.first()
+        val data = nextStep.createInitialState(this)
+        stepOptions = StepOptions(entries, active = 0)
+        this.authenticationSteps.add(nextStep.plugin to data)
     }
 
 }

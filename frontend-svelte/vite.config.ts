@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		allowedHosts: [
-			"authentikt-lib.werkbank.space"
+			"authentikt-lib.wb.local"
 		]
 	}
 });

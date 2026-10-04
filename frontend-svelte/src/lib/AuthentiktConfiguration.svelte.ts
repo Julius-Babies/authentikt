@@ -31,6 +31,8 @@ export type FlowStepData = {
     type: "step";
     namespace: string;
     payload?: Record<string, unknown>;
+    /** Namespaces of the steps the user can switch to instead of this one. */
+    alternatives?: string[];
 } | {
     type: "finished";
 }
@@ -161,6 +163,31 @@ export class Authentikt {
         if (step?.type !== "step") return null;
         return this.getPlugin(step.namespace);
     });
+
+    /**
+     * Namespaces of the steps the user can switch to instead of the active step.
+     */
+    alternatives = $derived.by(() => {
+        const step = this.currentFlow?.step;
+        if (step?.type !== "step") return [];
+        return step.alternatives ?? [];
+    });
+
+    /**
+     * Replaces the active step with one of its [alternatives] and loads the new state.
+     *
+     * @param namespace - the namespace of the alternative step.
+     */
+    switchToAlternative = async (namespace: string): Promise<void> => {
+        const url = new URL("alternatives", this.sessionUrl);
+        await fetch(url.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ namespace }),
+        });
+        // On 409 the alternative is no longer available, e.g. after a duplicate click. Load the current step either way.
+        await this.updateState();
+    }
 
     /**
      * @deprecated Use [registerPlugin] instead. Kept for backward compatibility.

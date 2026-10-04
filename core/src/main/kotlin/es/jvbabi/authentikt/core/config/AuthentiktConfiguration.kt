@@ -2,12 +2,13 @@ package es.jvbabi.authentikt.core.config
 
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
+import es.jvbabi.authentikt.core.step.plugins.NextStep
 import io.ktor.http.*
 import java.io.File
 import kotlin.time.Clock
 import kotlin.time.Duration
 
-typealias FindNextStepCallback<USER> = suspend (session: Session<USER>) -> BasePlugin<USER, *>
+typealias FindNextStepCallback<USER> = suspend (session: Session<USER>) -> NextStep<USER>
 
 /**
  * Holds the resolved configuration for an authentikt installation.

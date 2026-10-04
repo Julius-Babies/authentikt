@@ -1,7 +1,8 @@
 <script lang="ts">
     import "./layout.css";
     import {
-        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, useAuthentiktContext,
+        Authentikt, EmailUserSelectionRenderer, PasswordRenderer, TotpRenderer, OIDCRenderer, DoneRenderer, JunctionRenderer,
+        AuthentiktAlternatives, useAuthentiktContext,
         type AuthentiktConfiguration
     } from "$lib"
 
@@ -11,7 +12,7 @@
     import {quadOut} from "svelte/easing";
     import {currentUser} from "$lib/user";
     import {onMount} from "svelte";
-    import update_user from "./update_user";
+    import update_user from "$lib/update_user";
 
     const { children } = $props();
 
@@ -28,7 +29,7 @@
     }
 
     const config: AuthentiktConfiguration = {
-        baseUrl: "https://authentikt-lib.werkbank.space/api/authentikt/",
+        baseUrl: "https://authentikt-lib.wb.local/api/authentikt/",
         debug: {
             show_overlay: true,
         },
@@ -86,6 +87,8 @@
                             Logging into <strong>{dest.application_name}</strong>
                         </p>
                     {/if}
+                    <JunctionRenderer />
+
                     <EmailUserSelectionRenderer />
 
                     <PasswordRenderer>
@@ -117,6 +120,9 @@
                     <OIDCRenderer />
 
                     <DoneRenderer />
+
+                    <!-- A real app would map namespaces to labels via the label prop; the demo shows the namespace -->
+                    <AuthentiktAlternatives />
                 </div>
             </div>
         {/if}

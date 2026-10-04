@@ -15,6 +15,7 @@ status handling and flow updates are done for you.
 | `PasswordRenderer` | `authentikt-builtin/password` | `PasswordPluginInstance` |
 | `TotpRenderer` | `authentikt-builtin/totp` | `TotpPluginInstance` |
 | `OIDCRenderer` | `authentikt-builtin/oidc` | `OIDCPluginInstance` |
+| `JunctionRenderer` | `authentikt-builtin/junction` | `JunctionPluginInstance` |
 | `DoneRenderer` | `authentikt-builtin/done` | `DonePluginInstance` |
 
 All renderers accept the same props:
@@ -160,6 +161,54 @@ These side effects also apply when you provide a snippet. The snippet only repla
 </DoneRenderer>
 ```
 
+## JunctionRenderer {id="junction"}
+
+Server plugin: [](junction-plugin.md)
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `options` | `string[]` | Namespaces of the steps the user can choose from |
+| `status` | `"ready" \| "loading" \| "error"` | Request status |
+| `isActive` | `boolean` | Whether this step is active |
+| `select(namespace)` | `(namespace: string) => Promise<void>` | Selects an option and loads the next step |
+
+Besides the common props, `JunctionRenderer` accepts `namespace` for junctions installed under a different namespace,
+and `label`, a function that maps a namespace to the text shown in the default UI. Without `label`, the namespace
+itself is shown.
+
+```svelte
+<JunctionRenderer>
+    {#snippet children(plugin)}
+        <p>How do you want to confirm it's you?</p>
+        {#each plugin.options as option (option)}
+            <button onclick={() => plugin.select(option)}>{labels[option] ?? option}</button>
+        {/each}
+    {/snippet}
+</JunctionRenderer>
+```
+
+## AuthentiktAlternatives {id="alternatives"}
+
+Lists the [alternatives](step-order.md#alternatives) of the active step. Place it below the step renderers. It
+renders nothing if the active step has no alternatives.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `children` | `Snippet<[AlternativeOption[]]>` | Custom UI. Without it, a list of buttons is shown |
+| `label` | `(namespace: string) => string` | Looks up the label of a step. Without it, the namespace itself is shown |
+
+Each `AlternativeOption` has a `namespace`, its `label` and `select()`, which switches to it.
+
+```svelte
+<AuthentiktAlternatives label={(ns) => labels[ns] ?? ns}>
+    {#snippet children(options)}
+        {#each options as option (option.namespace)}
+            <button onclick={option.select}>Use {option.label} instead</button>
+        {/each}
+    {/snippet}
+</AuthentiktAlternatives>
+```
+
 ## Using your own component for a built-in plugin
 
 If you prefer a separate component over a snippet, register it for the built-in namespace together with the
@@ -175,6 +224,6 @@ auth.registerPlugin("authentikt-builtin/password", MyPasswordStep, (a, ns) => ne
 
 `MyPasswordStep` receives `plugin` as a prop. Render it through
 [`activeStepEntry`](frontend-client.md#generic-rendering). The exported plugin classes are
-`EmailUserSelectionPlugin`, `PasswordPlugin`, `TotpPlugin`, `OIDCPlugin` and `DonePlugin`.
+`EmailUserSelectionPlugin`, `PasswordPlugin`, `TotpPlugin`, `OIDCPlugin`, `JunctionPlugin` and `DonePlugin`.
 
 For complete, step-by-step examples, see [](frontend-custom-component.md).

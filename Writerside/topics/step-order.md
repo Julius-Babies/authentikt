@@ -13,13 +13,14 @@ installAuthentikt<User> {
 }
 ```
 
-The callback has the type `suspend (session: Session<USER>) -> BasePlugin<USER, *>`. It is called:
+The callback has the type `suspend (session: Session<USER>) -> NextStep<USER>`. A plugin is a `NextStep`, so you can
+return it directly. The callback is called:
 
 - on the first `check` request of a session, to choose the first step, and
 - every time a plugin calls `session.nextStep()`, which the built-in plugins do after a successful submission.
 
-The returned plugin must have been registered with `install(...)`. Otherwise, the request fails with
-`NotInstalledPluginCalled`.
+The returned plugin and its [alternatives](#alternatives) must have been registered with `install(...)`. Otherwise,
+the request fails with `NotInstalledPluginCalled`.
 
 ## Writing the callback
 
@@ -69,6 +70,48 @@ authorization { session ->
     }
 }
 ```
+
+## Alternatives {id="alternatives"}
+
+A step can offer alternatives the user may take instead, for example single sign-on next to the email step. Attach
+them with `alternative`:
+
+```kotlin
+authorization { session ->
+    when {
+        !session.has(emailPlugin) && !session.has(oidcPlugin) -> emailPlugin alternative listOf(oidcPlugin)
+        else -> donePlugin
+    }
+}
+```
+
+The email step is shown, and the client lists the OIDC step below it. When the user selects an alternative, it
+replaces the active step on the session's step stack and starts with a fresh state. The replaced step becomes an
+alternative itself, so the user can switch back.
+
+Switching does not call the step-order callback. It is called again once the alternative has been completed, so
+check for every step of the group, as `!session.has(emailPlugin) && !session.has(oidcPlugin)` does above. Otherwise,
+the callback returns the original step again.
+
+Alternatives only apply to the step they were returned with. The next step starts without alternatives unless the
+callback returns some again.
+
+## Prepared steps {id="prepared-steps"}
+
+Some plugins take input from the callback, like a constructor. They start with a prepared state instead of the one
+from `createState`. The [junction](junction-plugin.md) is started with the options the user chooses from:
+
+```kotlin
+!session.has(junctionPlugin) -> junctionPlugin(listOf(totpPlugin, passkeyPlugin, emailCodePlugin))
+```
+
+Prepared steps can be used anywhere a plugin can, including as alternatives:
+
+```kotlin
+passwordPlugin alternative listOf(junctionPlugin(listOf(passkeyPlugin, emailCodePlugin)))
+```
+
+To offer this in your own plugin, see [](custom-step-plugins.md#prepared-state).
 
 ## Rules of thumb
 

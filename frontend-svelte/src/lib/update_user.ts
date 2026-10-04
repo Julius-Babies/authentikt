@@ -1,7 +1,7 @@
-import {currentUser} from "$lib/user";
+import {currentUser} from "$lib/user.ts";
 
 export default function () {
-    fetch("https://authentikt-lib.werkbank.space/api/user/me", {
+    fetch("https://authentikt-lib.wb.local/api/user/me", {
         credentials: "include",
     }).then(response => {
         if (response.status === 401) currentUser.set("anonymous")

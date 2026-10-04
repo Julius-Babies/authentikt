@@ -18,7 +18,7 @@ interface FlowState {
 }
 
 type FlowStepData =
-    | { type: "step"; namespace: string; payload?: Record<string, unknown> }
+    | { type: "step"; namespace: string; payload?: Record<string, unknown>; alternatives?: string[] }
     | { type: "finished" };
 
 interface FlowUserState {
@@ -37,6 +37,10 @@ type FlowDestination =
 `activeStepEntry`
 : The registry entry (`{ namespace, factory, component }`) for the current step, or `null`. You can use it to render
 the active plugin's component generically.
+
+`alternatives: string[]`
+: Namespaces of the steps the user can switch to instead of the active step. Empty if there are none. See
+[](step-order.md#alternatives).
 
 `sessionUrl: URL`
 : `{baseUrl}flow/{sessionId}/`, the base for all step requests. Useful in custom plugins.
@@ -62,6 +66,10 @@ session is not deleted; it expires on its own after the server's `sessionTimeout
 : Requests `GET {sessionUrl}check` and updates `step`, `user`, `attributes` and `destination`. Plugins call it after a
 successful submission. Call it yourself if something outside the client advanced the flow. If the server answers
 with `404` because the session expired or was already completed, the flow is cancelled (see `cancelFlow()`).
+
+`switchToAlternative(namespace: string): Promise<void>`
+: Replaces the active step with one of its `alternatives` and loads the new state. Usually called through
+[`AuthentiktAlternatives`](frontend-renderers.md#alternatives).
 
 `setUser(user: FlowUserState | null): void`
 : Sets `currentFlow.user`. The email plugin calls it after identifying a user. `updateState()` also sets it from the
