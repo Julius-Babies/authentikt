@@ -48,16 +48,27 @@ Use it for callbacks from external systems, as the [OIDC plugin](oidc-plugin.md)
 
 ## Completing a step
 
-Step state is replaced, not mutated. When your route decides the step is done, it:
+When your route decides the step is done, it calls `session.completeStep(plugin, state)`. It replaces the step's
+state with the completed one and calls `session.nextStep()`, which asks the step-order callback for the next plugin.
 
-1. replaces the last entry of `session.authenticationSteps` with your plugin and a completed state, and
-2. calls `session.nextStep()`, which asks the step-order callback for the next plugin.
+Several requests for the same session can run at the same time, for example a double-clicked submit button.
+`completeStep` only advances the flow if your plugin is still the active step, and returns `false` otherwise. Answer
+such requests with `call.respondStepNotActive()` (`409 Conflict`, from `es.jvbabi.authentikt.core.routes.flow`):
 
 ```kotlin
-session.authenticationSteps[session.authenticationSteps.lastIndex] =
-    this@MyPlugin to MyState(completed = true)
-session.nextStep()
+if (!session.completeStep(this@MyPlugin, MyState(completed = true))) {
+    return@post call.respondStepNotActive()
+}
 ```
+
+To change the session together with the transition, for example to set `identifiedUser`, pass a block. It runs after
+the active-step check and before `nextStep()`:
+
+```kotlin
+session.completeStep(this@MyPlugin, MyState(completed = true)) { identifiedUser = user }
+```
+
+Don't modify `session.authenticationSteps` directly. See [](sessions.md#concurrency).
 
 ## Example: terms of service
 
@@ -95,11 +106,8 @@ class TermsPlugin<USER>(
         inRoute.post {
             val session = call.attributes[SessionKey] as Session<USER>
 
-            // Only accept requests while this plugin is the active step
-            if (session.authenticationSteps.lastOrNull()?.first != this@TermsPlugin) {
-                call.respondGson(buildGenericMap { put("success", false) }, HttpStatusCode.Conflict)
-                return@post
-            }
+            // Skip stale requests early. completeStep checks this again atomically.
+            if (!session.isActive(this@TermsPlugin)) return@post call.respondStepNotActive()
 
             val request = call.receive<TermsRequest>()
             if (!request.accepted) {
@@ -110,9 +118,9 @@ class TermsPlugin<USER>(
             onAccepted(session.identifiedUser!!.user, currentVersion)
             logger.info("Session ${session.sessionId} accepted terms $currentVersion")
 
-            session.authenticationSteps[session.authenticationSteps.lastIndex] =
-                this@TermsPlugin to TermsState(accepted = true, version = currentVersion)
-            session.nextStep()
+            if (!session.completeStep(this@TermsPlugin, TermsState(accepted = true, version = currentVersion))) {
+                return@post call.respondStepNotActive()
+            }
 
             call.respondGson(buildGenericMap { put("success", true) })
         }
@@ -185,7 +193,6 @@ class TermsPlugin<USER>(
 
 - The namespace is unique and matches the frontend registration.
 - `createState` returns a state that is *not* completed.
-- Routes check that the plugin is the active step before changing anything.
-- On success: replace the last step with a completed state, then call `session.nextStep()`.
+- On success: call `session.completeStep(plugin, completedState)` and answer `false` with `respondStepNotActive()`.
 - Failed attempts are limited if the step guards a secret (codes, passwords).
 - The plugin is passed to `install(...)` and returned by the step-order callback.

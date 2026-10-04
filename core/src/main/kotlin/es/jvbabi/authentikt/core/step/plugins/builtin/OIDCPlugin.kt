@@ -2,6 +2,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.findActiveSession
 import es.jvbabi.authentikt.core.step.BaseState
@@ -97,9 +98,12 @@ class OIDCPlugin<USER>(
                     val result = configuration.onUserInfo(userResponse, tokenResponseBody.accessToken)
                     when (result) {
                         is UserInfo.Result.Success -> {
-                            session.authenticationSteps[session.authenticationSteps.lastIndex] = this@OIDCPlugin to (session.authenticationSteps[session.authenticationSteps.lastIndex].second as OIDCPluginState).copy(hasCompleted = true)
-                            session.identifiedUser = result.user
-                            session.nextStep()
+                            val oidcState = session.authenticationSteps.lastOrNull()?.second as? OIDCPluginState
+                                ?: return@get call.respondStepNotActive()
+                            val completed = session.completeStep(this@OIDCPlugin, oidcState.copy(hasCompleted = true)) {
+                                identifiedUser = result.user
+                            }
+                            if (!completed) return@get call.respondStepNotActive()
 
                             val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
                                 parameters.append("_authentikt_flow_active", "true")

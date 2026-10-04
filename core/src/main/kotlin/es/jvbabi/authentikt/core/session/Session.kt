@@ -6,7 +6,10 @@ import es.jvbabi.authentikt.core.routes.flow.check.NotInstalledPluginCalled
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.util.AttributeKey
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
@@ -74,6 +77,11 @@ internal fun removeExpiredSessions() {
  * Device flow sessions expire [es.jvbabi.authentikt.core.config.OAuthConfiguration.deviceCodeLifetime]
  * after creation. Expired sessions are removed lazily on access and periodically in the background.
  *
+ * ## Concurrency
+ * Several requests for the same session can run at the same time. Step transitions are serialized by
+ * [completeStep], which only advances the flow if the step is still active. Use it instead of modifying
+ * [authenticationSteps] directly.
+ *
  * @param configuration the resolved configuration for this session.
  */
 class Session<USER>(
@@ -82,6 +90,7 @@ class Session<USER>(
 ) {
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 
+    @Volatile
     var identifiedUser: AuthentiktUser<USER>? = null
 
     val createdAt: Instant = configuration.clock.now()
@@ -112,10 +121,20 @@ class Session<USER>(
         sessions.remove(sessionId, this)
     }
 
-    val authenticationSteps = mutableListOf<Pair<BasePlugin<USER, *>, BaseState>>()
+    private val mutex = Mutex()
 
-    private val _privateAttributes = mutableMapOf<AttributeKey<*>, Any?>()
-    private val _publicAttributes = mutableMapOf<AttributeKey<*>, Any?>()
+    /**
+     * Runs [block] while no other step transition of this session is in progress. Not re-entrant.
+     */
+    internal suspend fun <T> withLock(block: suspend () -> T): T = mutex.withLock { block() }
+
+    /**
+     * Steps entered by this session. Use [completeStep] to advance the flow instead of modifying it directly.
+     */
+    val authenticationSteps: MutableList<Pair<BasePlugin<USER, *>, BaseState>> = CopyOnWriteArrayList()
+
+    private val _privateAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
+    private val _publicAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
 
     val attributes = SessionAttributeScope(_privateAttributes)
     val publicAttributes = PublicSessionAttributeScope(_publicAttributes)
@@ -134,6 +153,34 @@ class Session<USER>(
     suspend fun has(plugin: BasePlugin<USER, *>, needsCompletion: Boolean = true): Boolean {
         val stepForPlugin = this.authenticationSteps.firstOrNull { it.first == plugin } ?: return false
         return !needsCompletion || stepForPlugin.second.isCompleted()
+    }
+
+    /**
+     * Returns `true` if [plugin] is the step the session is currently waiting for.
+     *
+     * Step routes can check this before doing expensive work. [completeStep] checks it again atomically.
+     */
+    fun isActive(plugin: BasePlugin<USER, *>): Boolean = authenticationSteps.lastOrNull()?.first == plugin
+
+    /**
+     * Completes the active step and advances the flow, atomically with respect to other requests for this session.
+     *
+     * If [plugin] is the active step, its state is replaced with [state], [beforeNextStep] runs (for example to set
+     * [identifiedUser]) and [nextStep] is called. Otherwise nothing changes, for example because a concurrent
+     * request has already completed the step.
+     *
+     * @return `true` if the step was completed, `false` if [plugin] was not the active step.
+     */
+    suspend fun completeStep(
+        plugin: BasePlugin<USER, *>,
+        state: BaseState,
+        beforeNextStep: suspend Session<USER>.() -> Unit = {},
+    ): Boolean = withLock {
+        if (!isActive(plugin)) return@withLock false
+        authenticationSteps[authenticationSteps.lastIndex] = plugin to state
+        beforeNextStep()
+        nextStep()
+        true
     }
 
     fun pop() {

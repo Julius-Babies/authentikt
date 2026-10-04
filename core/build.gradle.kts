@@ -23,6 +23,7 @@ dependencies {
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.ktor.server.content.negotiation)
 }
 
 kotlin {

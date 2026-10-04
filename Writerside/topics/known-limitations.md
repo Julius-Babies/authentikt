@@ -15,9 +15,6 @@ collects common setup problems.
 - **No attempt limits.** Password, TOTP and email steps can be retried indefinitely. Add rate limiting, for example
   with Ktor's [RateLimit](https://ktor.io/docs/server-rate-limit.html) plugin or inside your `checkPassword` and
   `validate` callbacks.
-- **No ordering checks in built-in routes.** The built-in step routes don't verify that they are the active step.
-  The step-order callback still decides what happens next, but write your own plugins defensively. See
-  [](custom-step-plugins.md).
 - **User enumeration.** The email step tells the client whether an account exists.
 
 ### Protocol

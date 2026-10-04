@@ -42,6 +42,12 @@ export class EmailUserSelectionPlugin {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: this.email }),
             });
+            if (response.status === 409) {
+                // The step is no longer active, e.g. a duplicate submission. Load the current step instead.
+                await this.authentikt.updateState();
+                this.status = "ready";
+                return;
+            }
             const data = await response.json();
 
             if (data.type === "success") {

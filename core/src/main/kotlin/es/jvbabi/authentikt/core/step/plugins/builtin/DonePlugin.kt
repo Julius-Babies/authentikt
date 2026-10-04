@@ -2,6 +2,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.config.OAuthAccessToken
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.session.SessionKey
@@ -29,6 +30,7 @@ class DonePlugin<USER>(
         with(inRoute) {
             get {
                 val session = call.attributes[SessionKey] as Session<USER>
+                if (!session.isActive(this@DonePlugin)) return@get call.respondStepNotActive()
                 if (session.destination is SessionDestination.DeviceFlow) {
                     call.respondGson(buildGenericMap {
                         put("type", "device_flow_success")
@@ -37,20 +39,24 @@ class DonePlugin<USER>(
                 }
                 val user = session.identifiedUser!!.user
 
-                val step = session.authenticationSteps[session.authenticationSteps.lastIndex].second as DoneState
+                // Run onSuccess only once, even if the client requests this route several times in parallel
+                val scope = session.withLock {
+                    val step = session.authenticationSteps.last().second as DoneState
+                    if (step.isCompleted()) return@withLock null
 
-                if (!step.isCompleted()) {
-                    val scope = DonePluginScope()
-                    configuration.onSuccess(scope, session, user)
+                    DonePluginScope().also { scope ->
+                        configuration.onSuccess(scope, session, user)
+                        session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
+                        session.invalidate()
+                    }
+                }
 
+                if (scope != null) {
                     for (cookie in scope.cookies) {
                         call.response.cookies.append(cookie)
                     }
 
                     val cookieNames = scope.cookies.map { it.name }
-
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
-                    session.invalidate()
 
                     if (scope.redirectTo != null) {
                         call.respondGson(buildGenericMap {
