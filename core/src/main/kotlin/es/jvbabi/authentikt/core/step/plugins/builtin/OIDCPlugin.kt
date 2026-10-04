@@ -3,7 +3,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
 import es.jvbabi.authentikt.core.session.Session
-import es.jvbabi.authentikt.core.session.sessions
+import es.jvbabi.authentikt.core.session.findActiveSession
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import es.jvbabi.authentikt.core.utils.customSsl
@@ -51,7 +51,11 @@ class OIDCPlugin<USER>(
 
                 get("/callback") {
                     val state = json.decodeFromString<OIDCState>(call.request.queryParameters["state"]!!)
-                    val session = sessions[state.sessionId]!! as Session<USER>
+                    val session = findActiveSession(state.sessionId) as Session<USER>?
+                    if (session == null) {
+                        call.respondText("The session does not exist or has expired.", status = HttpStatusCode.NotFound)
+                        return@get
+                    }
                     val code = call.request.queryParameters["code"]!!
 
                     val tokenResponse = httpClient.post(configuration.tokenUrl) {

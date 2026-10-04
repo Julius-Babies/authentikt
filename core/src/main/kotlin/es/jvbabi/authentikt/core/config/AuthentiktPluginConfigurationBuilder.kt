@@ -3,6 +3,9 @@ package es.jvbabi.authentikt.core.config
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.http.Url
 import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * DSL builder used inside [es.jvbabi.authentikt.core.installAuthentikt]
@@ -24,6 +27,21 @@ class AuthentiktPluginConfigurationBuilder<USER> {
     var apiPrefix = ""
     var baseUrl = ""
     var uiLoginBaseUrl = ""
+
+    /**
+     * How long a session may be inactive before it expires. Every request to a flow route counts as activity.
+     */
+    var sessionTimeout: Duration = 30.minutes
+
+    /**
+     * How often expired sessions are removed from memory in the background.
+     */
+    var sessionCleanupInterval: Duration = 1.minutes
+
+    /**
+     * The clock used to determine session expiry. Mainly useful for tests.
+     */
+    var clock: Clock = Clock.System
     private var findNextStepCallback: FindNextStepCallback<USER>? = null
     private val installedPlugins = mutableSetOf<BasePlugin<USER, *>>()
     private val customSslCerts = mutableListOf<File>()
@@ -66,6 +84,8 @@ class AuthentiktPluginConfigurationBuilder<USER> {
         require(baseUrl.isNotEmpty()) { "baseUrl must be set" }
         require(customSslCerts.all { it.exists() }) { "customSslCerts must exist" }
         require(uiLoginBaseUrl.isNotEmpty()) { "uiLoginBaseUrl must be set" }
+        require(sessionTimeout.isPositive()) { "sessionTimeout must be positive" }
+        require(sessionCleanupInterval.isPositive()) { "sessionCleanupInterval must be positive" }
 
         return AuthentiktConfiguration(
             findNextStepCallback = this.findNextStepCallback!!,
@@ -75,6 +95,9 @@ class AuthentiktPluginConfigurationBuilder<USER> {
             uiLoginBaseUrl = Url(uiLoginBaseUrl),
             customSslCerts = customSslCerts,
             oAuthConfiguration = this.oauthServerConfig?.build(),
+            sessionTimeout = sessionTimeout,
+            sessionCleanupInterval = sessionCleanupInterval,
+            clock = clock,
         )
     }
 }

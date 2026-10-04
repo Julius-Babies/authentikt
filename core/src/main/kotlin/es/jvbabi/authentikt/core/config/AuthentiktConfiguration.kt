@@ -4,6 +4,8 @@ import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.http.*
 import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Duration
 
 typealias FindNextStepCallback<USER> = suspend (session: Session<USER>) -> BasePlugin<USER, *>
 
@@ -16,6 +18,9 @@ typealias FindNextStepCallback<USER> = suspend (session: Session<USER>) -> BaseP
  * @param baseUrl the base URL of the application (e.g. `https://example.com`). This does not include the [apiPrefix].
  * @param apiPrefix prefix prepended to all auth routes (e.g. `"/api/v1"`).
  * @param installedPlugins set of registered step plugins (password, TOTP, done, etc.).
+ * @param sessionTimeout how long a session may be inactive before it expires.
+ * @param sessionCleanupInterval how often expired sessions are removed in the background.
+ * @param clock the clock used to determine session expiry.
  */
 class AuthentiktConfiguration<USER>(
     val findNextStepCallback: FindNextStepCallback<USER>,
@@ -25,4 +30,7 @@ class AuthentiktConfiguration<USER>(
     val installedPlugins: Set<BasePlugin<USER, *>>,
     val customSslCerts: List<File>,
     val oAuthConfiguration: OAuthConfiguration?,
+    val sessionTimeout: Duration,
+    val sessionCleanupInterval: Duration,
+    val clock: Clock,
 )

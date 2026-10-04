@@ -6,6 +6,8 @@ import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
 import es.jvbabi.authentikt.core.session.SessionDestination.OAuth
 import es.jvbabi.authentikt.core.session.SessionKey
+import es.jvbabi.authentikt.core.session.findActiveSession
+import es.jvbabi.authentikt.core.session.removeExpiredSessions
 import es.jvbabi.authentikt.core.session.sessions
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.DoneState
@@ -16,8 +18,17 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlin.time.Duration.Companion.minutes
+import io.ktor.util.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+
+/**
+ * Polling state of a device flow session: time of the last poll and the current interval in seconds.
+ */
+private val DeviceCodePollStateKey = AttributeKey<Pair<Instant, Long>>("DeviceCodePollState")
 
 internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
 
@@ -121,8 +132,11 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
  * GET  /flow/{id}/check               → { type: "step", namespace: "..." }
  * POST /flow/{id}/steps/plugins/…     → Validates step
  * … repeat …
- * GET  /flow/{id}/steps/plugins/done  → Generates token
+ * GET  /flow/{id}/steps/plugins/done  → Generates token, ends the session
  * ```
+ *
+ * Sessions expire after [AuthentiktPluginConfigurationBuilder.sessionTimeout] without activity. Requests for
+ * unknown or expired sessions are answered with `404`.
  *
  * @param block configuration DSL that sets up plugins and the authorization flow callback.
  * @return an [AuthentiktInstance] that can be used to manage sessions.
@@ -139,7 +153,12 @@ fun <USER> Application.installAuthentikt(
 
     val authentiktInstance = AuthentiktInstance(configuration)
 
-    val deviceCodePollTracker = mutableMapOf<String, Pair<Long, Long>>()
+    launch {
+        while (isActive) {
+            delay(configuration.sessionCleanupInterval)
+            removeExpiredSessions()
+        }
+    }
 
     routing {
         if (configuration.oAuthConfiguration != null) {
@@ -185,14 +204,26 @@ fun <USER> Application.installAuthentikt(
                             val deviceCode = params["device_code"]!!
                             val clientId = params["client_id"]!!
 
-                            val now = System.currentTimeMillis()
-                            val pollState = deviceCodePollTracker[deviceCode]
+                            val session = sessions.values.find { session -> session.destination is DeviceFlow && session.destination.deviceCode == deviceCode && session.destination.applicationId == clientId }
+                                as? Session<USER>
+                            if (session == null || session.isExpired()) {
+                                session?.invalidate()
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "expired_token")
+                                        put("error_description", "The device code is invalid or has expired.")
+                                    },
+                                    status = HttpStatusCode.BadRequest,
+                                )
+                                return@post
+                            }
+
+                            val now = configuration.clock.now()
+                            val pollState = session.attributes[DeviceCodePollStateKey]
                             if (pollState != null) {
                                 val (lastPoll, interval) = pollState
-                                val elapsed = now - lastPoll
-                                if (elapsed < interval * 1000L) {
-                                    val newInterval = interval + 5
-                                    deviceCodePollTracker[deviceCode] = now to newInterval
+                                if (now - lastPoll < interval.seconds) {
+                                    session.attributes[DeviceCodePollStateKey] = now to (interval + 5)
                                     call.respondGson(
                                         value = buildGenericMap {
                                             put("error", "slow_down")
@@ -203,20 +234,7 @@ fun <USER> Application.installAuthentikt(
                                     return@post
                                 }
                             }
-                            deviceCodePollTracker[deviceCode] = now to (pollState?.second ?: 5L)
-
-                            val session = sessions.values.find { session -> session.destination is DeviceFlow && session.destination.deviceCode == deviceCode && session.destination.applicationId == clientId }
-                                as? Session<USER>
-                            if (session == null) {
-                                call.respondGson(
-                                    value = buildGenericMap {
-                                        put("error", "expired_token")
-                                        put("error_description", "The device code is invalid or has expired.")
-                                    },
-                                    status = HttpStatusCode.BadRequest,
-                                )
-                                return@post
-                            }
+                            session.attributes[DeviceCodePollStateKey] = now to (pollState?.second ?: 5L)
 
                             val lastStep = session.authenticationSteps.lastOrNull()
 
@@ -247,7 +265,7 @@ fun <USER> Application.installAuthentikt(
                             requireNotNull(step.configuration.onOAuthSuccess) { "onOAuthSuccess callback is required for OAuth flow" }
                             val accessToken = step.configuration.onOAuthSuccess(session, session.identifiedUser!!.user)
                             session.authenticationSteps[session.authenticationSteps.lastIndex] = step to DoneState(completed = true)
-                            deviceCodePollTracker.remove(deviceCode)
+                            session.invalidate()
                             call.respondGson(
                                 buildGenericMap {
                                     put("access_token", accessToken.accessToken)
@@ -299,7 +317,7 @@ fun <USER> Application.installAuthentikt(
                                     put("user_code", result.userCode)
                                     put("verification_uri", verificationUri)
                                     put("verification_uri_complete", verificationUri)
-                                    put("expires_in", 10.minutes.inWholeSeconds)
+                                    put("expires_in", configuration.oAuthConfiguration.deviceCodeLifetime.inWholeSeconds)
                                     put("interval", 5.seconds.inWholeSeconds)
                                 })
                             }
@@ -314,8 +332,17 @@ fun <USER> Application.installAuthentikt(
                 route("/{sessionId}") sessionScopedRoute@{
                     createRouteScopedPlugin("Get Session from Path") {
                         onCall { call ->
-                            val sessionId = call.parameters["sessionId"]
-                            val session = sessions[sessionId]!!
+                            val session = findActiveSession(call.parameters["sessionId"])
+                            if (session == null) {
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "session_not_found")
+                                        put("error_description", "The session does not exist or has expired.")
+                                    },
+                                    status = HttpStatusCode.NotFound,
+                                )
+                                return@onCall
+                            }
                             call.attributes[SessionKey] = session
                         }
                     }.let { this@sessionScopedRoute.install(it) }

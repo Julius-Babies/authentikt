@@ -21,6 +21,9 @@ can continue the flow.
 | Member | Type | Description |
 |--------|------|-------------|
 | `sessionId` | `String` | Unique ID used in all flow URLs |
+| `createdAt` | `Instant` | When the session was created |
+| `lastActivityAt` | `Instant` | When the session was last accessed through a flow route |
+| `expiresAt` | `Instant` | When the session expires, see [](#storage-and-lifetime) |
 | `destination` | `SessionDestination?` | Where the login result goes. `null` for regular logins |
 | `identifiedUser` | `AuthentiktUser<USER>?` | Set by an identification step. `null` until then |
 | `authenticationSteps` | `MutableList<Pair<BasePlugin, BaseState>>` | Every step that has been entered, in order. The last entry is the active step |
@@ -44,6 +47,13 @@ behaviour in custom routes.
 
 `getPublicAttributes()`
 : Returns the public attributes as a `Map<String, Any?>`, keyed by attribute name.
+
+`isExpired()`
+: Returns `true` once `expiresAt` has passed.
+
+`invalidate()`
+: Removes the session from the store. Further requests for it are answered with `404`. Use it to end a flow early,
+for example after too many failed attempts.
 
 ## Attributes
 
@@ -100,7 +110,31 @@ post {
 }
 ```
 
-## Storage and lifetime
+## Storage and lifetime {id="storage-and-lifetime"}
 
 Sessions are kept in an in-memory map inside the JVM. They are not persisted and not shared between server
 instances. See [](known-limitations.md) for what this means in practice.
+
+A session ends in one of these ways:
+
+- **Inactivity.** Every request to a flow route (`/flow/{sessionId}/...`) counts as activity. A session that sees
+  no activity for [`sessionTimeout`](backend-configuration.md) (default: 30 minutes) expires.
+- **Device flow lifetime.** Sessions with a `DeviceFlow` destination expire
+  [`deviceCodeLifetime`](oauth-device-flow.md#configuration) after creation (default: 10 minutes), regardless of
+  activity. This is the `expires_in` value the device receives.
+- **Completion.** The session is removed as soon as the `DonePlugin` has completed. For device flows, this happens
+  when the device redeems its code at `POST /oauth/token`.
+- **Manually**, by calling `invalidate()`.
+
+Expired sessions are removed when they are accessed and, in addition, by a background job that runs every
+[`sessionCleanupInterval`](backend-configuration.md) (default: 1 minute). Requests for unknown or expired sessions
+are answered with `404`:
+
+```json
+{
+  "error": "session_not_found",
+  "error_description": "The session does not exist or has expired."
+}
+```
+
+The Svelte client cancels the flow when it receives this response.

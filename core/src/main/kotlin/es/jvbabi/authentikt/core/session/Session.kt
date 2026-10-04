@@ -6,6 +6,8 @@ import es.jvbabi.authentikt.core.routes.flow.check.NotInstalledPluginCalled
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.util.AttributeKey
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 typealias SessionId = String
@@ -34,7 +36,30 @@ class PublicSessionAttributeScope(
 
 val SessionKey = AttributeKey<Session<*>>("Session")
 
-val sessions = mutableMapOf<SessionId, Session<*>>()
+val sessions: MutableMap<SessionId, Session<*>> = ConcurrentHashMap()
+
+/**
+ * Returns the session with the given [sessionId] and records activity on it.
+ *
+ * Expired sessions are removed from [sessions] and `null` is returned.
+ */
+internal fun findActiveSession(sessionId: SessionId?): Session<*>? {
+    if (sessionId == null) return null
+    val session = sessions[sessionId] ?: return null
+    if (session.isExpired()) {
+        session.invalidate()
+        return null
+    }
+    session.touch()
+    return session
+}
+
+/**
+ * Removes all expired sessions from [sessions].
+ */
+internal fun removeExpiredSessions() {
+    sessions.values.removeIf { it.isExpired() }
+}
 
 /**
  * Represents a single authentication session.
@@ -43,6 +68,11 @@ val sessions = mutableMapOf<SessionId, Session<*>>()
  * It tracks:
  * - The identified user ([identifiedUser]) once a user-selection step completes.
  * - A stack of completed authentication steps ([authenticationSteps]).
+ * - Its lifetime ([createdAt], [lastActivityAt], [expiresAt]).
+ *
+ * Regular sessions expire after [AuthentiktConfiguration.sessionTimeout] without activity.
+ * Device flow sessions expire [es.jvbabi.authentikt.core.config.OAuthConfiguration.deviceCodeLifetime]
+ * after creation. Expired sessions are removed lazily on access and periodically in the background.
  *
  * @param configuration the resolved configuration for this session.
  */
@@ -53,6 +83,34 @@ class Session<USER>(
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 
     var identifiedUser: AuthentiktUser<USER>? = null
+
+    val createdAt: Instant = configuration.clock.now()
+
+    @Volatile
+    var lastActivityAt: Instant = createdAt
+        private set
+
+    /**
+     * The point in time after which this session is no longer usable.
+     */
+    val expiresAt: Instant
+        get() = when (destination) {
+            is SessionDestination.DeviceFlow -> createdAt + configuration.oAuthConfiguration!!.deviceCodeLifetime
+            else -> lastActivityAt + configuration.sessionTimeout
+        }
+
+    fun isExpired(): Boolean = configuration.clock.now() >= expiresAt
+
+    internal fun touch() {
+        lastActivityAt = configuration.clock.now()
+    }
+
+    /**
+     * Removes this session from the session store. Subsequent requests for it are answered with `404`.
+     */
+    fun invalidate() {
+        sessions.remove(sessionId, this)
+    }
 
     val authenticationSteps = mutableListOf<Pair<BasePlugin<USER, *>, BaseState>>()
 

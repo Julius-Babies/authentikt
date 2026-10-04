@@ -22,7 +22,8 @@ collects common setup problems.
 
 ### Protocol
 
-- **Error responses** are not uniform. An unknown session ID causes a `500` response.
+- **Error responses** are not uniform. Only unknown or expired sessions have a dedicated format (`404`, see
+  [](http-api.md#errors)).
 
 ### Frontend
 

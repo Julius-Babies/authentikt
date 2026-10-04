@@ -5,6 +5,7 @@ import kotlin.time.Duration
 class OAuthConfiguration(
     val onAuthorize: OAuthConfigurationBuilder.ValidateAuthorizationCallback?,
     val onDeviceFlowAuthorize: OAuthConfigurationBuilder.ValidateDeviceFlowAuthorizationCallback?,
+    val deviceCodeLifetime: Duration,
 )
 
 sealed class OAuthAuthorizationResult {
