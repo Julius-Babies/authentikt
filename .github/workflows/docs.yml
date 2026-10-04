@@ -3,6 +3,11 @@ name: Docs
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - "Writerside/**"
+      - "core/**"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -11,16 +16,41 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+env:
+  INSTANCE: Writerside/a
+  ARTIFACT: webHelpA2-all.zip
+  DOCKER_VERSION: "2026.09.0357"
 
+jobs:
+  writerside:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build Writerside docs
+        uses: JetBrains/writerside-github-action@v4
+        with:
+          instance: ${{ env.INSTANCE }}
+          artifact: ${{ env.ARTIFACT }}
+          docker-version: ${{ env.DOCKER_VERSION }}
+
+      - name: Check Writerside build report
+        uses: JetBrains/writerside-checker-action@v1
+        with:
+          instance: ${{ env.INSTANCE }}
+
+      - name: Upload Writerside artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: writerside
+          path: artifacts/${{ env.ARTIFACT }}
+          retention-days: 7
+
+  dokka:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -41,13 +71,47 @@ jobs:
       - name: Generate Dokka docs
         run: ./gradlew :core:dokkaGenerateHtml
 
+      - name: Upload Dokka artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dokka
+          path: core/build/dokka/html
+          retention-days: 7
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: [writerside, dokka]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download Writerside artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: writerside
+
+      - name: Download Dokka artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dokka
+          path: dokka
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          unzip -q -O UTF-8 "$ARTIFACT" -d site
+          mkdir -p site/api
+          cp -r dokka/. site/api/
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: core/build/dokka/html
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
