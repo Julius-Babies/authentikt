@@ -49,11 +49,11 @@ behaviour in custom routes.
 : Returns the public attributes as a `Map<String, Any?>`, keyed by attribute name.
 
 `isActive(plugin)`
-: Returns `true` if `plugin` is the active step, that is the last entry of `authenticationSteps`. Step routes check
-this before changing the session.
+: Returns `true` if `plugin` is the active step, that is the last entry of `authenticationSteps`.
 
-`withLock { ... }`
-: Runs the block while holding the session lock. See [](#concurrency).
+`completeStep(plugin, state, beforeNextStep = {})`
+: If `plugin` is the active step, replaces its state with `state`, runs `beforeNextStep` and calls `nextStep()`.
+Returns `false` without changing anything if `plugin` is not the active step. See [](#concurrency).
 
 `isExpired()`
 : Returns `true` once `expiresAt` has passed.
@@ -120,24 +120,16 @@ post {
 ## Concurrency {id="concurrency"}
 
 A browser can send several requests for the same session at once, for example a double-clicked submit button, or a
-device polling `/oauth/token` while the user finishes the login. To keep the session consistent, every session has a
-lock:
+device polling `/oauth/token` while the user finishes the login. Requests run in parallel, so every change to the
+flow goes through a per-session lock:
 
-- Requests to flow routes (`/flow/{sessionId}/...`, including all step plugin routes) hold the lock for the whole
-  request. Requests for the same session are processed one after another; different sessions don't block each other.
-- `POST /oauth/token` holds the lock while it checks and redeems a device code, so a code can be redeemed only once.
-- Code outside these routes, such as static plugin routes or your own background jobs, must acquire the lock itself:
+- `completeStep` checks the active step, replaces its state and calls `nextStep()` as one atomic operation. Of two
+  parallel submissions for the same step, only the first advances the flow; the second gets `false`.
+- The `DonePlugin` runs `onSuccess` only once per session.
+- `POST /oauth/token` checks and redeems a device code under the lock, so a code can be redeemed only once.
 
-```kotlin
-session.withLock {
-    if (!session.isActive(myPlugin)) return@withLock
-    session.authenticationSteps[session.authenticationSteps.lastIndex] = myPlugin to MyState(completed = true)
-    session.nextStep()
-}
-```
-
-The lock is re-entrant within the same coroutine, so calling `withLock` from a flow route is harmless. Keep the
-work inside the lock short: other requests for the session wait for it.
+Use `completeStep` in your own plugins instead of modifying `authenticationSteps` directly. Different sessions don't
+block each other.
 
 ## Storage and lifetime {id="storage-and-lifetime"}
 

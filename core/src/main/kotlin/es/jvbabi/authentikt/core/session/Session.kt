@@ -6,13 +6,10 @@ import es.jvbabi.authentikt.core.routes.flow.check.NotInstalledPluginCalled
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.util.AttributeKey
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.coroutines.AbstractCoroutineContextElement
-import kotlin.coroutines.CoroutineContext
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
@@ -68,13 +65,6 @@ internal fun removeExpiredSessions() {
 }
 
 /**
- * Marks the sessions whose lock is held by the current coroutine, so [Session.withLock] can be re-entered.
- */
-private class HeldSessionLocks(val sessions: Set<Session<*>>) : AbstractCoroutineContextElement(Key) {
-    companion object Key : CoroutineContext.Key<HeldSessionLocks>
-}
-
-/**
  * Represents a single authentication session.
  *
  * A session is created when the client calls `POST /authentikt/login`.
@@ -88,9 +78,9 @@ private class HeldSessionLocks(val sessions: Set<Session<*>>) : AbstractCoroutin
  * after creation. Expired sessions are removed lazily on access and periodically in the background.
  *
  * ## Concurrency
- * Requests to flow routes (`/flow/{sessionId}/...`) are processed one after another for the same session:
- * the library holds the session's lock ([withLock]) for the whole request. Code that reads or modifies a
- * session outside these routes (static routes, background jobs) should wrap the access in [withLock].
+ * Several requests for the same session can run at the same time. Step transitions are serialized by
+ * [completeStep], which only advances the flow if the step is still active. Use it instead of modifying
+ * [authenticationSteps] directly.
  *
  * @param configuration the resolved configuration for this session.
  */
@@ -100,6 +90,7 @@ class Session<USER>(
 ) {
     val sessionId: SessionId = (1..3).joinToString("") { Uuid.random().toHexString() }
 
+    @Volatile
     var identifiedUser: AuthentiktUser<USER>? = null
 
     val createdAt: Instant = configuration.clock.now()
@@ -133,23 +124,14 @@ class Session<USER>(
     private val mutex = Mutex()
 
     /**
-     * Runs [block] while holding this session's lock, so that no other request modifies the session meanwhile.
-     *
-     * The lock is re-entrant within the same coroutine. Flow routes already hold it, so calling this from a
-     * step plugin route is allowed but not required.
+     * Runs [block] while no other step transition of this session is in progress. Not re-entrant.
      */
-    suspend fun <T> withLock(block: suspend () -> T): T {
-        val heldLocks = currentCoroutineContext()[HeldSessionLocks]?.sessions.orEmpty()
-        if (this in heldLocks) return block()
-        return mutex.withLock {
-            withContext(HeldSessionLocks(heldLocks + this)) { block() }
-        }
-    }
+    internal suspend fun <T> withLock(block: suspend () -> T): T = mutex.withLock { block() }
 
     /**
-     * Steps entered by this session. Only modify it while holding the session lock, see [withLock].
+     * Steps entered by this session. Use [completeStep] to advance the flow instead of modifying it directly.
      */
-    val authenticationSteps = mutableListOf<Pair<BasePlugin<USER, *>, BaseState>>()
+    val authenticationSteps: MutableList<Pair<BasePlugin<USER, *>, BaseState>> = CopyOnWriteArrayList()
 
     private val _privateAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
     private val _publicAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
@@ -176,10 +158,30 @@ class Session<USER>(
     /**
      * Returns `true` if [plugin] is the step the session is currently waiting for.
      *
-     * Step routes should check this before modifying the session. A request for a step that is no longer
-     * active (for example a duplicate submission) must not touch [authenticationSteps].
+     * Step routes can check this before doing expensive work. [completeStep] checks it again atomically.
      */
     fun isActive(plugin: BasePlugin<USER, *>): Boolean = authenticationSteps.lastOrNull()?.first == plugin
+
+    /**
+     * Completes the active step and advances the flow, atomically with respect to other requests for this session.
+     *
+     * If [plugin] is the active step, its state is replaced with [state], [beforeNextStep] runs (for example to set
+     * [identifiedUser]) and [nextStep] is called. Otherwise nothing changes, for example because a concurrent
+     * request has already completed the step.
+     *
+     * @return `true` if the step was completed, `false` if [plugin] was not the active step.
+     */
+    suspend fun completeStep(
+        plugin: BasePlugin<USER, *>,
+        state: BaseState,
+        beforeNextStep: suspend Session<USER>.() -> Unit = {},
+    ): Boolean = withLock {
+        if (!isActive(plugin)) return@withLock false
+        authenticationSteps[authenticationSteps.lastIndex] = plugin to state
+        beforeNextStep()
+        nextStep()
+        true
+    }
 
     fun pop() {
         if (authenticationSteps.isEmpty()) identifiedUser = null

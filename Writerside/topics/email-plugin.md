@@ -37,8 +37,8 @@ EmailUserSelectionPlugin<User> {
 
 When the user is found, the plugin:
 
-1. sets `session.identifiedUser`,
-2. marks its step as completed, and
+1. marks its step as completed,
+2. sets `session.identifiedUser`, and
 3. calls `session.nextStep()`.
 
 When no user is found, the step stays active and the client can try again.

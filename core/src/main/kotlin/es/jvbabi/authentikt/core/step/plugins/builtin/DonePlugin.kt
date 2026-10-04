@@ -39,20 +39,24 @@ class DonePlugin<USER>(
                 }
                 val user = session.identifiedUser!!.user
 
-                val step = session.authenticationSteps[session.authenticationSteps.lastIndex].second as DoneState
+                // Run onSuccess only once, even if the client requests this route several times in parallel
+                val scope = session.withLock {
+                    val step = session.authenticationSteps.last().second as DoneState
+                    if (step.isCompleted()) return@withLock null
 
-                if (!step.isCompleted()) {
-                    val scope = DonePluginScope()
-                    configuration.onSuccess(scope, session, user)
+                    DonePluginScope().also { scope ->
+                        configuration.onSuccess(scope, session, user)
+                        session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
+                        session.invalidate()
+                    }
+                }
 
+                if (scope != null) {
                     for (cookie in scope.cookies) {
                         call.response.cookies.append(cookie)
                     }
 
                     val cookieNames = scope.cookies.map { it.name }
-
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
-                    session.invalidate()
 
                     if (scope.redirectTo != null) {
                         call.respondGson(buildGenericMap {

@@ -1,11 +1,12 @@
 package es.jvbabi.authentikt.core
 
 import es.jvbabi.authentikt.core.config.*
-import es.jvbabi.authentikt.core.routes.flow.SessionScope
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
 import es.jvbabi.authentikt.core.session.SessionDestination.OAuth
+import es.jvbabi.authentikt.core.session.SessionKey
+import es.jvbabi.authentikt.core.session.findActiveSession
 import es.jvbabi.authentikt.core.session.removeExpiredSessions
 import es.jvbabi.authentikt.core.session.sessions
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
@@ -331,8 +332,23 @@ fun <USER> Application.installAuthentikt(
 
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
-                route("/{sessionId}") {
-                    install(SessionScope)
+                route("/{sessionId}") sessionScopedRoute@{
+                    createRouteScopedPlugin("Get Session from Path") {
+                        onCall { call ->
+                            val session = findActiveSession(call.parameters["sessionId"])
+                            if (session == null) {
+                                call.respondGson(
+                                    value = buildGenericMap {
+                                        put("error", "session_not_found")
+                                        put("error_description", "The session does not exist or has expired.")
+                                    },
+                                    status = HttpStatusCode.NotFound,
+                                )
+                                return@onCall
+                            }
+                            call.attributes[SessionKey] = session
+                        }
+                    }.let { this@sessionScopedRoute.install(it) }
 
                     route("/check") { checkFlowStatus<USER>() }
 

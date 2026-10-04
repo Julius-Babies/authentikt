@@ -50,9 +50,8 @@ class PasswordPlugin<USER>(
 
                 val isValid = configuration.checkPassword(session.identifiedUser!!.user, request.password)
 
-                if (isValid) {
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@PasswordPlugin to PasswordState(true)
-                    session.nextStep()
+                if (isValid && !session.completeStep(this@PasswordPlugin, PasswordState(true))) {
+                    return@post call.respondStepNotActive()
                 }
 
                 call.respond(buildMap { put("success", isValid) })

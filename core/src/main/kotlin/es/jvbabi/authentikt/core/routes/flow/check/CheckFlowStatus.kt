@@ -11,7 +11,9 @@ import io.ktor.server.routing.*
 internal fun <USER> Route.checkFlowStatus() {
     get {
         val session = call.attributes[SessionKey] as Session<USER>
-        if (session.authenticationSteps.isEmpty()) session.nextStep()
+        if (session.authenticationSteps.isEmpty()) session.withLock {
+            if (session.authenticationSteps.isEmpty()) session.nextStep()
+        }
 
         val (stepForUser, data) = session.authenticationSteps.last()
 

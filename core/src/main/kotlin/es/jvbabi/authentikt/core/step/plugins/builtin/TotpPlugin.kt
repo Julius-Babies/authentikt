@@ -60,9 +60,8 @@ class TotpPlugin<USER>(
 
                 val success = configuration.check(session.identifiedUser!!.user, request.totp)
 
-                if (success) {
-                    session.authenticationSteps[session.authenticationSteps.lastIndex] = this@TotpPlugin to TotpState(true)
-                    session.nextStep()
+                if (success && !session.completeStep(this@TotpPlugin, TotpState(true))) {
+                    return@post call.respondStepNotActive()
                 }
 
                 call.respondGson(buildMap { put("success", success) })

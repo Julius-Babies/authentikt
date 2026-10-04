@@ -98,15 +98,12 @@ class OIDCPlugin<USER>(
                     val result = configuration.onUserInfo(userResponse, tokenResponseBody.accessToken)
                     when (result) {
                         is UserInfo.Result.Success -> {
-                            // The callback is not a flow route, so the session lock has to be acquired explicitly
-                            val advanced = session.withLock {
-                                if (!session.isActive(this@OIDCPlugin)) return@withLock false
-                                session.authenticationSteps[session.authenticationSteps.lastIndex] = this@OIDCPlugin to (session.authenticationSteps[session.authenticationSteps.lastIndex].second as OIDCPluginState).copy(hasCompleted = true)
-                                session.identifiedUser = result.user
-                                session.nextStep()
-                                true
+                            val oidcState = session.authenticationSteps.lastOrNull()?.second as? OIDCPluginState
+                                ?: return@get call.respondStepNotActive()
+                            val completed = session.completeStep(this@OIDCPlugin, oidcState.copy(hasCompleted = true)) {
+                                identifiedUser = result.user
                             }
-                            if (!advanced) return@get call.respondStepNotActive()
+                            if (!completed) return@get call.respondStepNotActive()
 
                             val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
                                 parameters.append("_authentikt_flow_active", "true")

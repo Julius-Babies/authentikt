@@ -56,12 +56,11 @@ class EmailUserSelectionPlugin<USER>(
                     return@post
                 }
 
-                session.identifiedUser = user
-                session.authenticationSteps[session.authenticationSteps.lastIndex] = this@EmailUserSelectionPlugin to EmailSelectionPluginState(
-                    withUsername = configuration.withUsername,
-                    hasUser = true,
-                )
-                session.nextStep()
+                val completed = session.completeStep(
+                    plugin = this@EmailUserSelectionPlugin,
+                    state = EmailSelectionPluginState(withUsername = configuration.withUsername, hasUser = true),
+                ) { identifiedUser = user }
+                if (!completed) return@post call.respondStepNotActive()
 
                 call.respondGson(buildGenericMap {
                     put("type", "success")

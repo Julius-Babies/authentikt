@@ -116,7 +116,5 @@ Requests to a step that is not the session's active step, for example a duplicat
 }
 ```
 
-Requests for the same session are processed one after another, so parallel requests cannot corrupt the session.
-
 Validation failures (wrong password, unknown user) are returned with status `200` and a negative body, as listed
 above.
