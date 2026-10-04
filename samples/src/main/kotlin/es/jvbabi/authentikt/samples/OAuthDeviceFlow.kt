@@ -23,7 +23,7 @@ suspend fun oauthDeviceFlowTest() {
     println("Starting OAuth Device Flow")
     println()
 
-    val baseUrl = "https://authentikt-lib.werkbank.space"
+    val baseUrl = "https://authentikt-lib.wb.local"
 
     val clientId = "authentikt-tv-app"
 

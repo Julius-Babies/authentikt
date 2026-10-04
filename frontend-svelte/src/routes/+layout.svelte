@@ -12,7 +12,7 @@
     import {quadOut} from "svelte/easing";
     import {currentUser} from "$lib/user";
     import {onMount} from "svelte";
-    import update_user from "./update_user";
+    import update_user from "$lib/update_user";
 
     const { children } = $props();
 
@@ -29,7 +29,7 @@
     }
 
     const config: AuthentiktConfiguration = {
-        baseUrl: "https://authentikt-lib.werkbank.space/api/authentikt/",
+        baseUrl: "https://authentikt-lib.wb.local/api/authentikt/",
         debug: {
             show_overlay: true,
         },

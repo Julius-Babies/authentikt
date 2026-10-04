@@ -148,9 +148,9 @@ fun Application.module() {
     }
 
     val instance = installAuthentikt {
-        baseUrl = "https://authentikt-lib.werkbank.space"
+        baseUrl = "https://authentikt-lib.wb.local/"
         apiPrefix = "/api/"
-        uiLoginBaseUrl = "https://authentikt-lib.werkbank.space/"
+        uiLoginBaseUrl = "https://authentikt-lib.wb.local/"
         customSslCert("/Users/julius/.werkbank/certificates/rootCa.crt")
 
         sessionTimeout = 15.minutes

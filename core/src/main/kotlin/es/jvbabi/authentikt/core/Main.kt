@@ -112,7 +112,7 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
  *
  * Pair this backend with `authentikt-svelte`:
  * ```svelte
- * <Authentikt baseUrl="https://authentikt-lib.werkbank.space/api/v1/authentikt/">
+ * <Authentikt baseUrl="https://authentikt-lib.wb.local/api/v1/authentikt/">
  *   {@const auth = useAuthentiktContext()}
  *   {#if !auth.currentFlow}
  *     <button onclick={auth.startLoginFlow}>Login</button>
