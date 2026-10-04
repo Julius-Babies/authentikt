@@ -1,26 +1,43 @@
 # Custom components for built-in plugins
 
-A built-in step consists of a **plugin class** (state + server calls) and a **renderer** (UI). To use your own UI,
-keep the plugin class and register it under the built-in namespace with your component:
+You can replace the UI of any built-in step, for example the password form, with your own Svelte component. The
+server communication stays in the library, and your component only renders.
 
-```ts
-auth.registerPlugin(namespace, YourComponent, (auth, ns) => new BuiltInPluginClass(auth, ns));
-```
+## How it works
 
-| Namespace | Plugin class | Replaces |
-|-----------|--------------|----------|
+Every built-in step on the client consists of two parts:
+
+- **Plugin class** (for example `PasswordPlugin`): holds the reactive state (`password`, `status`) and sends the
+  requests to the server (`submit()`).
+- **Renderer** (for example `PasswordRenderer`): the Svelte component that shows the form.
+
+They are connected through the client's plugin registry. A renderer does two things:
+
+1. On mount, it calls `auth.registerPlugin(namespace, component, factory)`. This stores *"for namespace X, create
+   the plugin with `factory` and render it with `component`"* and returns the plugin instance.
+2. It renders its markup while `plugin.isActive` is `true`, that is, while the server's current step has this
+   namespace.
+
+A custom component does exactly the same, just with your own markup. Because it registers the **built-in plugin
+class** under the **built-in namespace**, the requests still go to the right server routes.
+
+| Namespace | Plugin class | Built-in renderer |
+|-----------|--------------|-------------------|
 | `authentikt-builtin/email` | `EmailUserSelectionPlugin` | `EmailUserSelectionRenderer` |
 | `authentikt-builtin/password` | `PasswordPlugin` | `PasswordRenderer` |
 | `authentikt-builtin/totp` | `TotpPlugin` | `TotpRenderer` |
 | `authentikt-builtin/oidc` | `OIDCPlugin` | `OIDCRenderer` |
 | `authentikt-builtin/done` | `DonePlugin` | `DoneRenderer` |
 
-There are two ways to wire this up: a component that [registers itself](#self-registering), or
-[central registration](#central) with generic rendering.
+The members of each plugin instance (fields, statuses, actions) are listed in [](frontend-renderers.md).
 
-## Self-registering component {id="self-registering"}
+## Example: a custom password step
 
-The component registers itself on mount and renders while its step is active. It is used like a built-in renderer.
+<procedure title="Build the component" id="password-procedure">
+<step>
+
+**Register the built-in plugin with your component.** Create `PasswordStep.svelte`. The component needs a
+reference to itself to pass it to `registerPlugin`, which is what the `module` script is for:
 
 ```svelte
 <!-- src/lib/auth/PasswordStep.svelte -->
@@ -35,22 +52,27 @@ The component registers itself on mount and renders while its step is active. It
         type PasswordPluginInstance,
     } from "@julius-babies/authentikt-svelte";
 
-    let { plugin: externalPlugin }: { plugin?: PasswordPluginInstance } = $props();
-
     const auth = useAuthentiktContext();
 
-    const selfPlugin = auth.registerPlugin<PasswordPluginInstance>(
-        "authentikt-builtin/password",
-        PasswordStep,
-        (a, ns) => new PasswordPlugin(a, ns),
+    const plugin = auth.registerPlugin<PasswordPluginInstance>(
+        "authentikt-builtin/password",       // built-in namespace
+        PasswordStep,                        // your component
+        (a, ns) => new PasswordPlugin(a, ns) // built-in plugin class
     );
-
-    const plugin = $derived(externalPlugin ?? selfPlugin);
 </script>
+```
 
+</step>
+<step>
+
+**Render while the step is active.** Below the scripts, add your markup. Bind the input to `plugin.password`,
+show messages based on `plugin.status` and call `plugin.submit()`:
+
+```svelte
 {#if plugin.isActive}
     <form onsubmit={(e) => { e.preventDefault(); plugin.submit(); }}>
         <p>Signing in as {auth.currentFlow?.user?.displayName}</p>
+
         <input type="password" autocomplete="current-password" bind:value={plugin.password} />
 
         {#if plugin.status === "password_incorrect"}
@@ -64,12 +86,13 @@ The component registers itself on mount and renders while its step is active. It
 {/if}
 ```
 
-- The module script imports the component itself, so it can pass itself to `registerPlugin`.
-- The optional `plugin` prop makes the component usable with [central registration](#central) as well.
-- `plugin.submit()` calls `auth.updateState()` on success. The next step becomes active, and this component hides
-  itself.
+When the password is correct, `submit()` loads the next step from the server. `plugin.isActive` becomes `false`,
+and the form disappears.
 
-Use it instead of the built-in renderer:
+</step>
+<step>
+
+**Use it instead of the built-in renderer:**
 
 ```svelte
 {#if auth.currentFlow}
@@ -80,16 +103,24 @@ Use it instead of the built-in renderer:
 {/if}
 ```
 
-> Don't mount `PasswordRenderer` as well. Both would register for the same namespace and both would render.
-{style="warning"}
+Remove `<PasswordRenderer />`. If both are mounted, both register for the same namespace and both show a form.
 
-A self-registering component keeps the instance it got on mount. Mount it inside `{#if auth.currentFlow}`, so
-it is recreated (with empty fields) for each new flow.
+Keep the components inside `{#if auth.currentFlow}`. They are then recreated for every new flow, so the password
+field starts empty.
 
-## Central registration {id="central"}
+</step>
+</procedure>
 
-Register all steps in one place and render only the active one. The step components receive the instance as a
-prop and don't need `isActive` checks:
+## Alternative: register all steps in one place {id="central"}
+
+Instead of letting each component register itself, you can register every step in a single parent component and
+render only the step that is currently active. Your step components then become simple components that receive
+the plugin instance as a prop.
+
+The client provides two values for this:
+
+- `auth.activeStepEntry.component`: the component registered for the current step's namespace
+- `auth.activeStepPlugin`: the plugin instance for the current step
 
 ```svelte
 <!-- src/lib/auth/LoginFlow.svelte -->
@@ -106,16 +137,21 @@ prop and don't need `isActive` checks:
 
     const auth = useAuthentiktContext();
 
+    // namespace → (component, plugin class)
     auth.registerPlugin("authentikt-builtin/email", EmailForm, (a, ns) => new EmailUserSelectionPlugin(a, ns));
     auth.registerPlugin("authentikt-builtin/password", PasswordForm, (a, ns) => new PasswordPlugin(a, ns));
     auth.registerPlugin("authentikt-builtin/done", DoneView, (a, ns) => new DonePlugin(a, ns));
 </script>
 
+<!-- Render whatever step is active -->
 {#if auth.currentFlow && auth.activeStepEntry && auth.activeStepPlugin}
     {@const Step = auth.activeStepEntry.component}
     <Step plugin={auth.activeStepPlugin} user={auth.currentFlow.user} />
 {/if}
 ```
+
+A step component only needs to accept `plugin` (and optionally `user`). Since only the active step is mounted, it
+doesn't need an `isActive` check:
 
 ```svelte
 <!-- src/lib/auth/PasswordForm.svelte -->
@@ -132,18 +168,20 @@ prop and don't need `isActive` checks:
 </form>
 ```
 
-`auth.activeStepPlugin` always returns the instance of the current flow, so no state carries over between flows.
-
 ## Steps with side effects {id="side-effects"}
 
-Some renderers do more than render. A custom component for these steps must trigger the same actions itself:
+Two built-in renderers do more than show markup. If you replace them, your component has to do this work itself:
 
-| Renderer | Side effect to replicate |
-|----------|--------------------------|
-| `DoneRenderer` | Call `plugin.complete()` when the step is active, then handle `plugin.result` |
-| `OIDCRenderer` | Call `plugin.redirect()` when the step is active |
+`DoneRenderer`
+: As soon as the step is active, it calls `plugin.complete()`. The server then runs your `onSuccess` and sets the
+cookies. When `plugin.result` arrives, the renderer reloads the page (`success`), follows the redirect
+(`redirect`) or closes the flow (`device_flow_success`).
 
-Example: a done step that refreshes the app via SvelteKit instead of reloading the page.
+`OIDCRenderer`
+: As soon as the step is active, it calls `plugin.redirect()`, which sends the browser to the identity provider.
+
+Here is a done step for the [central registration](#central) above. Instead of reloading the page, it refreshes
+the SvelteKit data and closes the login:
 
 ```svelte
 <!-- src/lib/auth/DoneView.svelte -->
@@ -154,16 +192,17 @@ Example: a done step that refreshes the app via SvelteKit instead of reloading t
     let { plugin }: { plugin: DonePlugin } = $props();
     const auth = useAuthentiktContext();
 
-    // Complete the flow on the server. Runs at most once per instance.
+    // 1. Tell the server to finish the login (runs at most once per instance)
     $effect(() => {
         if (plugin.result === null) void plugin.complete();
     });
 
+    // 2. React to the server's answer
     $effect(() => {
         const result = plugin.result;
         if (result?.type === "redirect") window.location.href = result.to;
         if (result?.type === "success") void invalidateAll().then(auth.cancelFlow);
-        // "device_flow_success": keep the message until the user closes it
+        // "device_flow_success": keep the message visible until the user closes it
     });
 </script>
 
@@ -175,10 +214,10 @@ Example: a done step that refreshes the app via SvelteKit instead of reloading t
 {/if}
 ```
 
-This version is written for central registration. As a self-registering component, add the `registerPlugin` call
-and wrap both effects and the markup in `plugin.isActive` checks.
+If you write it as a self-registering component instead, add the `registerPlugin` call as in the password example,
+and only run the effects and show the markup while `plugin.isActive` is `true`.
 
-`plugin.result` is `null` until the server responds, then one of:
+`plugin.result` is `null` until the server responds. After that, it is one of:
 
 ```ts
 { type: "success"; cookies?: string[] }
