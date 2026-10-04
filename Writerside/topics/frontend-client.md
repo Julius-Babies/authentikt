@@ -59,11 +59,12 @@ URL and loads the current step.
 session is not deleted.
 
 `updateState(): Promise<void>`
-: Requests `GET {sessionUrl}check` and updates `step`, `attributes` and `destination`. Plugins call it after a
+: Requests `GET {sessionUrl}check` and updates `step`, `user`, `attributes` and `destination`. Plugins call it after a
 successful submission. Call it yourself if something outside the client advanced the flow.
 
 `setUser(user: FlowUserState | null): void`
-: Sets `currentFlow.user`. The email plugin calls it after identifying a user.
+: Sets `currentFlow.user`. The email plugin calls it after identifying a user. `updateState()` also sets it from the
+server response, so the user is restored after a page reload.
 
 ## Resuming from the URL
 
