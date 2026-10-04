@@ -148,6 +148,9 @@ class TermsPlugin<USER>(
 `respondGson` and `buildGenericMap` are small helpers from `es.jvbabi.authentikt.core.utils`. They serialize
 `Map<String, Any?>` values without needing `@Serializable` classes. You can use `call.respond` instead.
 
+If your step checks a secret the user enters, limit failed attempts with `RateLimiter`, see
+[](rate-limiting.md#custom-plugins).
+
 ### Wiring it up
 
 ```kotlin
@@ -211,5 +214,5 @@ class TermsPlugin<USER>(
 - The namespace is unique and matches the frontend registration.
 - `createState` returns a state that is *not* completed.
 - On success: call `session.completeStep(plugin, completedState)` and answer `false` with `respondStepNotActive()`.
-- Failed attempts are limited if the step guards a secret (codes, passwords).
+- Failed attempts are limited with a [`RateLimiter`](rate-limiting.md#custom-plugins) if the step guards a secret (codes, passwords).
 - The plugin is passed to `install(...)` and returned by the step-order callback.

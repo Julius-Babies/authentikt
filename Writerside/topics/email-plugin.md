@@ -19,6 +19,9 @@ val emailPlugin = EmailUserSelectionPlugin<User> {
 : Looks up a user. Return `null` if nobody matches. The function is `suspend`, so you can call your database
 directly. The value is passed through as entered, so normalize it (trim, lowercase) here if needed.
 
+`rateLimit` (default: `10 triesPer 1.minutes`)
+: Lookups without a match allowed per session. `null` disables the limit. See [](rate-limiting.md).
+
 `withUsername` (default: `false`)
 : A hint for the frontend that the input field also accepts a username. It is forwarded to the client as
 `with_username` in the payload. The lookup itself is entirely up to `findUserByEmail`. To actually accept
@@ -41,7 +44,8 @@ When the user is found, the plugin:
 2. sets `session.identifiedUser`, and
 3. calls `session.nextStep()`.
 
-When no user is found, the step stays active and the client can try again.
+When no user is found, the step stays active and the client can try again until the
+[rate limit](rate-limiting.md) is reached.
 
 > The response tells the client whether an account exists for the given address. If user enumeration matters for
 > your application, consider a custom identification plugin that always continues with the next step.
@@ -52,8 +56,13 @@ When no user is found, the step stays active and the client can try again.
 **Payload** (in the `check` response)
 
 ```json
-{ "with_username": false }
+{
+  "with_username": false,
+  "rate_limit": { "max_tries": 10, "period_seconds": 60, "remaining_tries": 10 }
+}
 ```
+
+`rate_limit` is omitted if the limit is disabled. See [](rate-limiting.md#client-state).
 
 **Request:** `POST /flow/{sessionId}/steps/plugins/authentikt-builtin/email`
 
@@ -68,11 +77,14 @@ When no user is found, the step stays active and the client can try again.
 ```
 
 ```json
-{ "type": "user_not_found" }
+{ "type": "user_not_found", "rate_limit": { "max_tries": 10, "period_seconds": 60, "remaining_tries": 9 } }
 ```
+
+While locked: `429 Too Many Requests` with `{ "type": "rate_limited", "error": "rate_limited", "rate_limit": { ... } }`.
 
 ## Frontend
 
 Use [`EmailUserSelectionRenderer`](frontend-renderers.md#email). Its plugin instance exposes `email`, `status`
-(`"ready" | "loading" | "user_not_existing" | "error"`), `typedPayload.with_username` and `submit()`. After a
+(`"ready" | "loading" | "user_not_existing" | "rate_limited" | "error"`), `typedPayload.with_username`,
+`rateLimit` and `submit()`. After a
 successful submission, it also calls `auth.setUser(...)` with the returned username and display name.

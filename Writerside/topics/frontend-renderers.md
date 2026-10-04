@@ -54,8 +54,9 @@ Server plugin: [](email-plugin.md)
 | Member | Type | Description |
 |--------|------|-------------|
 | `email` | `string` | Input value, bindable |
-| `status` | `"ready" \| "loading" \| "user_not_existing" \| "error"` | Request status |
+| `status` | `"ready" \| "loading" \| "user_not_existing" \| "rate_limited" \| "error"` | Request status |
 | `typedPayload` | `{ with_username: boolean }` | Whether usernames are accepted as well |
+| `rateLimit` | `RateLimitState \| null` | Lookups left and lock state, see [below](#rate-limits) |
 | `isActive` | `boolean` | Whether this step is active |
 | `submit()` | `() => Promise<void>` | Sends the email. On success, calls `setUser(...)` and loads the next step |
 
@@ -79,7 +80,8 @@ Server plugin: [](password-plugin.md)
 | Member | Type | Description |
 |--------|------|-------------|
 | `password` | `string` | Input value, bindable |
-| `status` | `"ready" \| "loading" \| "password_incorrect" \| "error"` | Request status |
+| `status` | `"ready" \| "loading" \| "password_incorrect" \| "rate_limited" \| "error"` | Request status |
+| `rateLimit` | `RateLimitState \| null` | Attempts left and lock state, see [below](#rate-limits) |
 | `isActive` | `boolean` | Whether this step is active |
 | `submit()` | `() => Promise<void>` | Sends the password and loads the next step on success |
 
@@ -90,7 +92,8 @@ Server plugin: [](totp-plugin.md)
 | Member | Type | Description |
 |--------|------|-------------|
 | `totp` | `string` | Input value, bindable |
-| `status` | `"ready" \| "loading" \| "totp_incorrect" \| "error"` | Request status |
+| `status` | `"ready" \| "loading" \| "totp_incorrect" \| "rate_limited" \| "error"` | Request status |
+| `rateLimit` | `RateLimitState \| null` | Attempts left and lock state, see [below](#rate-limits) |
 | `isActive` | `boolean` | Whether this step is active |
 | `submit()` | `() => Promise<void>` | Sends the code and loads the next step on success |
 
@@ -106,6 +109,42 @@ Server plugin: [](totp-plugin.md)
         <button onclick={plugin.submit}>Verify</button>
     {/snippet}
 </TotpRenderer>
+```
+
+## Rate limits {id="rate-limits"}
+
+The email, password and TOTP plugins expose the step's [rate limit](rate-limiting.md) as `rateLimit`. It is `null`
+if the server does not limit the step.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `maxTries` | `number` | Failed attempts allowed per period |
+| `periodSeconds` | `number` | Length of the period |
+| `remainingTries` | `number` | Attempts left before the step is locked |
+| `isLocked` | `boolean` | Whether the step is locked. `submit()` does nothing while locked |
+| `remainingLockSeconds` | `number` | Seconds until the lock expires, `0` if not locked |
+| `lockedUntil` | `Date \| null` | When the lock expires |
+
+While the step is locked, `remainingLockSeconds` and `isLocked` update every second. When the lock expires, the
+flow state is reloaded to get the new number of remaining tries. The default UIs disable the input while locked
+and show a countdown. In a snippet, use `formatLockDuration` to format the seconds as `m:ss`:
+
+```svelte
+<script>
+    import { PasswordRenderer, formatLockDuration } from "authentikt-svelte";
+</script>
+
+<PasswordRenderer>
+    {#snippet children(plugin)}
+        <input type="password" bind:value={plugin.password} disabled={plugin.rateLimit?.isLocked} />
+        {#if plugin.rateLimit?.isLocked}
+            <p>Too many attempts. Try again in {formatLockDuration(plugin.rateLimit.remainingLockSeconds)}.</p>
+        {:else if plugin.status === "password_incorrect"}
+            <p>Wrong password, {plugin.rateLimit?.remainingTries} attempts left.</p>
+        {/if}
+        <button onclick={plugin.submit} disabled={plugin.rateLimit?.isLocked}>Continue</button>
+    {/snippet}
+</PasswordRenderer>
 ```
 
 ## OIDCRenderer {id="oidc"}
