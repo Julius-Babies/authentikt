@@ -176,3 +176,5 @@ auth.registerPlugin("authentikt-builtin/password", MyPasswordStep, (a, ns) => ne
 `MyPasswordStep` receives `plugin` as a prop. Render it through
 [`activeStepEntry`](frontend-client.md#generic-rendering). The exported plugin classes are
 `EmailUserSelectionPlugin`, `PasswordPlugin`, `TotpPlugin`, `OIDCPlugin` and `DonePlugin`.
+
+For complete, step-by-step examples, see [](frontend-custom-component.md).
