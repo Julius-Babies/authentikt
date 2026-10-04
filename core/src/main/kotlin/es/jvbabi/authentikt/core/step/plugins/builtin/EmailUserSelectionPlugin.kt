@@ -2,6 +2,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.AuthentiktUser
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -42,6 +43,8 @@ class EmailUserSelectionPlugin<USER>(
     override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
+                val session = call.attributes[SessionKey] as Session<USER>
+                if (!session.isActive(this@EmailUserSelectionPlugin)) return@post call.respondStepNotActive()
                 val request = call.receive<LoginEmailRequest>()
                 val user = configuration.findUserByEmail(request.email)
 
@@ -53,7 +56,6 @@ class EmailUserSelectionPlugin<USER>(
                     return@post
                 }
 
-                val session = call.attributes[SessionKey] as Session<USER>
                 session.identifiedUser = user
                 session.authenticationSteps[session.authenticationSteps.lastIndex] = this@EmailUserSelectionPlugin to EmailSelectionPluginState(
                     withUsername = configuration.withUsername,

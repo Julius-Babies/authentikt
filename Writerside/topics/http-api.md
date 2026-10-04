@@ -45,7 +45,8 @@ callback.
 | `user` | The identified user as `{ "username", "display_name" }`. Omitted until a user-selection step has identified a user |
 | `destination` | `{ "type": "none" }` or `{ "type": "device_flow", "application_id", "application_name" }` |
 
-The active step is always the last entered one. After the `DonePlugin` has run, `check` keeps returning it.
+The active step is always the last entered one. After the `DonePlugin` has run, the session is removed and `check`
+answers with `404`. For device flows, this happens once the device has redeemed its code.
 
 ## Step routes
 
@@ -104,6 +105,18 @@ The flow routes do not use a common error format yet. Requests for an unknown or
   "error_description": "The session does not exist or has expired."
 }
 ```
+
+Requests to a step that is not the session's active step, for example a duplicate submission, are answered with
+`409 Conflict`. The client should reload the flow state with `check`:
+
+```json
+{
+  "error": "step_not_active",
+  "error_description": "This step is not the active step of the session."
+}
+```
+
+Requests for the same session are processed one after another, so parallel requests cannot corrupt the session.
 
 Validation failures (wrong password, unknown user) are returned with status `200` and a negative body, as listed
 above.

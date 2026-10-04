@@ -4,6 +4,7 @@ import dev.turingcomplete.kotlinonetimepassword.HmacAlgorithm
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordConfig
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordGenerator
 import es.jvbabi.authentikt.core.AuthentiktInstance
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -53,8 +54,9 @@ class TotpPlugin<USER>(
     override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
-                val request = call.receive<TotpRequest>()
                 val session = call.attributes[SessionKey] as Session<USER>
+                if (!session.isActive(this@TotpPlugin)) return@post call.respondStepNotActive()
+                val request = call.receive<TotpRequest>()
 
                 val success = configuration.check(session.identifiedUser!!.user, request.totp)
 

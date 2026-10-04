@@ -2,6 +2,7 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.config.OAuthAccessToken
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.session.SessionKey
@@ -29,6 +30,7 @@ class DonePlugin<USER>(
         with(inRoute) {
             get {
                 val session = call.attributes[SessionKey] as Session<USER>
+                if (!session.isActive(this@DonePlugin)) return@get call.respondStepNotActive()
                 if (session.destination is SessionDestination.DeviceFlow) {
                     call.respondGson(buildGenericMap {
                         put("type", "device_flow_success")

@@ -1,12 +1,11 @@
 package es.jvbabi.authentikt.core
 
 import es.jvbabi.authentikt.core.config.*
+import es.jvbabi.authentikt.core.routes.flow.SessionScope
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
 import es.jvbabi.authentikt.core.session.SessionDestination.OAuth
-import es.jvbabi.authentikt.core.session.SessionKey
-import es.jvbabi.authentikt.core.session.findActiveSession
 import es.jvbabi.authentikt.core.session.removeExpiredSessions
 import es.jvbabi.authentikt.core.session.sessions
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
@@ -218,62 +217,65 @@ fun <USER> Application.installAuthentikt(
                                 return@post
                             }
 
-                            val now = configuration.clock.now()
-                            val pollState = session.attributes[DeviceCodePollStateKey]
-                            if (pollState != null) {
-                                val (lastPoll, interval) = pollState
-                                if (now - lastPoll < interval.seconds) {
-                                    session.attributes[DeviceCodePollStateKey] = now to (interval + 5)
+                            // Serialize polls of the same device code, so it can only be redeemed once
+                            session.withLock {
+                                if (sessions[session.sessionId] !== session) {
                                     call.respondGson(
                                         value = buildGenericMap {
-                                            put("error", "slow_down")
-                                            put("error_description", "The client is polling too frequently.")
+                                            put("error", "expired_token")
+                                            put("error_description", "The device code is invalid or has expired.")
                                         },
                                         status = HttpStatusCode.BadRequest,
                                     )
-                                    return@post
+                                    return@withLock
                                 }
-                            }
-                            session.attributes[DeviceCodePollStateKey] = now to (pollState?.second ?: 5L)
 
-                            val lastStep = session.authenticationSteps.lastOrNull()
-
-                            if (lastStep?.first !is DonePlugin) {
-                                call.respondGson(
-                                    value = buildGenericMap {
-                                        put("error", "authorization_pending")
-                                        put("error_description", "The authorization request is pending.")
-                                    },
-                                    status = HttpStatusCode.BadRequest,
-                                )
-                                return@post
-                            }
-
-                            val step = lastStep.first as DonePlugin<USER>
-                            val state = lastStep.second as DoneState
-                            if (state.isCompleted()) {
-                                call.respondGson(
-                                    value = buildGenericMap {
-                                        put("error", "expired_token")
-                                        put("error_description", "The device code has already been used.")
-                                    },
-                                    status = HttpStatusCode.BadRequest,
-                                )
-                                return@post
-                            }
-
-                            requireNotNull(step.configuration.onOAuthSuccess) { "onOAuthSuccess callback is required for OAuth flow" }
-                            val accessToken = step.configuration.onOAuthSuccess(session, session.identifiedUser!!.user)
-                            session.authenticationSteps[session.authenticationSteps.lastIndex] = step to DoneState(completed = true)
-                            session.invalidate()
-                            call.respondGson(
-                                buildGenericMap {
-                                    put("access_token", accessToken.accessToken)
-                                    put("token_type", "bearer")
-                                    put("expires_in", accessToken.expiresIn.inWholeSeconds)
-                                    put("refresh_token", accessToken.refreshToken)
+                                val now = configuration.clock.now()
+                                val pollState = session.attributes[DeviceCodePollStateKey]
+                                if (pollState != null) {
+                                    val (lastPoll, interval) = pollState
+                                    if (now - lastPoll < interval.seconds) {
+                                        session.attributes[DeviceCodePollStateKey] = now to (interval + 5)
+                                        call.respondGson(
+                                            value = buildGenericMap {
+                                                put("error", "slow_down")
+                                                put("error_description", "The client is polling too frequently.")
+                                            },
+                                            status = HttpStatusCode.BadRequest,
+                                        )
+                                        return@withLock
+                                    }
                                 }
-                            )
+                                session.attributes[DeviceCodePollStateKey] = now to (pollState?.second ?: 5L)
+
+                                val lastStep = session.authenticationSteps.lastOrNull()
+
+                                if (lastStep?.first !is DonePlugin) {
+                                    call.respondGson(
+                                        value = buildGenericMap {
+                                            put("error", "authorization_pending")
+                                            put("error_description", "The authorization request is pending.")
+                                        },
+                                        status = HttpStatusCode.BadRequest,
+                                    )
+                                    return@withLock
+                                }
+
+                                val step = lastStep.first as DonePlugin<USER>
+                                requireNotNull(step.configuration.onOAuthSuccess) { "onOAuthSuccess callback is required for OAuth flow" }
+                                val accessToken = step.configuration.onOAuthSuccess(session, session.identifiedUser!!.user)
+                                session.authenticationSteps[session.authenticationSteps.lastIndex] = step to DoneState(completed = true)
+                                // Redeemed: later polls find no session and receive expired_token
+                                session.invalidate()
+                                call.respondGson(
+                                    buildGenericMap {
+                                        put("access_token", accessToken.accessToken)
+                                        put("token_type", "bearer")
+                                        put("expires_in", accessToken.expiresIn.inWholeSeconds)
+                                        put("refresh_token", accessToken.refreshToken)
+                                    }
+                                )
+                            }
                         }
 
                         else -> call.respondText(
@@ -329,23 +331,8 @@ fun <USER> Application.installAuthentikt(
 
         route("${configuration.apiPrefix}/authentikt") {
             route("/flow") {
-                route("/{sessionId}") sessionScopedRoute@{
-                    createRouteScopedPlugin("Get Session from Path") {
-                        onCall { call ->
-                            val session = findActiveSession(call.parameters["sessionId"])
-                            if (session == null) {
-                                call.respondGson(
-                                    value = buildGenericMap {
-                                        put("error", "session_not_found")
-                                        put("error_description", "The session does not exist or has expired.")
-                                    },
-                                    status = HttpStatusCode.NotFound,
-                                )
-                                return@onCall
-                            }
-                            call.attributes[SessionKey] = session
-                        }
-                    }.let { this@sessionScopedRoute.install(it) }
+                route("/{sessionId}") {
+                    install(SessionScope)
 
                     route("/check") { checkFlowStatus<USER>() }
 

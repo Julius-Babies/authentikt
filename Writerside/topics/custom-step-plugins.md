@@ -38,7 +38,9 @@ Get the session with `call.attributes[SessionKey]`.
 
 `installStaticRoutes(inRoute, instance)`
 : Optional. `inRoute` is scoped to `{apiPrefix}/authentikt/static/plugins/{namespace}` and is not tied to a session.
-Use it for callbacks from external systems, as the [OIDC plugin](oidc-plugin.md) does.
+Use it for callbacks from external systems, as the [OIDC plugin](oidc-plugin.md) does. Static routes don't hold the
+session lock, so wrap every access to a session in `session.withLock { ... }` (see
+[](sessions.md#concurrency)).
 
 `BaseState.isCompleted()`
 : What `session.has(plugin)` checks.
@@ -47,6 +49,16 @@ Use it for callbacks from external systems, as the [OIDC plugin](oidc-plugin.md)
 : The `payload` the client receives in the `check` response. It is serialized with Gson.
 
 ## Completing a step
+
+Requests for the same session are processed one after another, so your route does not need its own
+synchronization. It does need to check that it is still the active step: a duplicate submission waits for the first
+one and then sees the next step. Answer such requests with `call.respondStepNotActive()` (`409 Conflict`, from
+`es.jvbabi.authentikt.core.routes.flow`):
+
+```kotlin
+val session = call.attributes[SessionKey] as Session<USER>
+if (!session.isActive(this@MyPlugin)) return@post call.respondStepNotActive()
+```
 
 Step state is replaced, not mutated. When your route decides the step is done, it:
 
@@ -96,10 +108,7 @@ class TermsPlugin<USER>(
             val session = call.attributes[SessionKey] as Session<USER>
 
             // Only accept requests while this plugin is the active step
-            if (session.authenticationSteps.lastOrNull()?.first != this@TermsPlugin) {
-                call.respondGson(buildGenericMap { put("success", false) }, HttpStatusCode.Conflict)
-                return@post
-            }
+            if (!session.isActive(this@TermsPlugin)) return@post call.respondStepNotActive()
 
             val request = call.receive<TermsRequest>()
             if (!request.accepted) {
@@ -185,7 +194,8 @@ class TermsPlugin<USER>(
 
 - The namespace is unique and matches the frontend registration.
 - `createState` returns a state that is *not* completed.
-- Routes check that the plugin is the active step before changing anything.
+- Routes check `session.isActive(plugin)` before changing anything.
+- Static routes access the session only inside `session.withLock { ... }`.
 - On success: replace the last step with a completed state, then call `session.nextStep()`.
 - Failed attempts are limited if the step guards a secret (codes, passwords).
 - The plugin is passed to `install(...)` and returned by the step-order callback.

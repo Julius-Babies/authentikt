@@ -6,7 +6,13 @@ import es.jvbabi.authentikt.core.routes.flow.check.NotInstalledPluginCalled
 import es.jvbabi.authentikt.core.step.BaseState
 import es.jvbabi.authentikt.core.step.plugins.BasePlugin
 import io.ktor.util.AttributeKey
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
@@ -62,6 +68,13 @@ internal fun removeExpiredSessions() {
 }
 
 /**
+ * Marks the sessions whose lock is held by the current coroutine, so [Session.withLock] can be re-entered.
+ */
+private class HeldSessionLocks(val sessions: Set<Session<*>>) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<HeldSessionLocks>
+}
+
+/**
  * Represents a single authentication session.
  *
  * A session is created when the client calls `POST /authentikt/login`.
@@ -73,6 +86,11 @@ internal fun removeExpiredSessions() {
  * Regular sessions expire after [AuthentiktConfiguration.sessionTimeout] without activity.
  * Device flow sessions expire [es.jvbabi.authentikt.core.config.OAuthConfiguration.deviceCodeLifetime]
  * after creation. Expired sessions are removed lazily on access and periodically in the background.
+ *
+ * ## Concurrency
+ * Requests to flow routes (`/flow/{sessionId}/...`) are processed one after another for the same session:
+ * the library holds the session's lock ([withLock]) for the whole request. Code that reads or modifies a
+ * session outside these routes (static routes, background jobs) should wrap the access in [withLock].
  *
  * @param configuration the resolved configuration for this session.
  */
@@ -112,10 +130,29 @@ class Session<USER>(
         sessions.remove(sessionId, this)
     }
 
+    private val mutex = Mutex()
+
+    /**
+     * Runs [block] while holding this session's lock, so that no other request modifies the session meanwhile.
+     *
+     * The lock is re-entrant within the same coroutine. Flow routes already hold it, so calling this from a
+     * step plugin route is allowed but not required.
+     */
+    suspend fun <T> withLock(block: suspend () -> T): T {
+        val heldLocks = currentCoroutineContext()[HeldSessionLocks]?.sessions.orEmpty()
+        if (this in heldLocks) return block()
+        return mutex.withLock {
+            withContext(HeldSessionLocks(heldLocks + this)) { block() }
+        }
+    }
+
+    /**
+     * Steps entered by this session. Only modify it while holding the session lock, see [withLock].
+     */
     val authenticationSteps = mutableListOf<Pair<BasePlugin<USER, *>, BaseState>>()
 
-    private val _privateAttributes = mutableMapOf<AttributeKey<*>, Any?>()
-    private val _publicAttributes = mutableMapOf<AttributeKey<*>, Any?>()
+    private val _privateAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
+    private val _publicAttributes = ConcurrentHashMap<AttributeKey<*>, Any?>()
 
     val attributes = SessionAttributeScope(_privateAttributes)
     val publicAttributes = PublicSessionAttributeScope(_publicAttributes)
@@ -135,6 +172,14 @@ class Session<USER>(
         val stepForPlugin = this.authenticationSteps.firstOrNull { it.first == plugin } ?: return false
         return !needsCompletion || stepForPlugin.second.isCompleted()
     }
+
+    /**
+     * Returns `true` if [plugin] is the step the session is currently waiting for.
+     *
+     * Step routes should check this before modifying the session. A request for a step that is no longer
+     * active (for example a duplicate submission) must not touch [authenticationSteps].
+     */
+    fun isActive(plugin: BasePlugin<USER, *>): Boolean = authenticationSteps.lastOrNull()?.first == plugin
 
     fun pop() {
         if (authenticationSteps.isEmpty()) identifiedUser = null

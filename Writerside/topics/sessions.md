@@ -48,6 +48,13 @@ behaviour in custom routes.
 `getPublicAttributes()`
 : Returns the public attributes as a `Map<String, Any?>`, keyed by attribute name.
 
+`isActive(plugin)`
+: Returns `true` if `plugin` is the active step, that is the last entry of `authenticationSteps`. Step routes check
+this before changing the session.
+
+`withLock { ... }`
+: Runs the block while holding the session lock. See [](#concurrency).
+
 `isExpired()`
 : Returns `true` once `expiresAt` has passed.
 
@@ -109,6 +116,28 @@ post {
     // ...
 }
 ```
+
+## Concurrency {id="concurrency"}
+
+A browser can send several requests for the same session at once, for example a double-clicked submit button, or a
+device polling `/oauth/token` while the user finishes the login. To keep the session consistent, every session has a
+lock:
+
+- Requests to flow routes (`/flow/{sessionId}/...`, including all step plugin routes) hold the lock for the whole
+  request. Requests for the same session are processed one after another; different sessions don't block each other.
+- `POST /oauth/token` holds the lock while it checks and redeems a device code, so a code can be redeemed only once.
+- Code outside these routes, such as static plugin routes or your own background jobs, must acquire the lock itself:
+
+```kotlin
+session.withLock {
+    if (!session.isActive(myPlugin)) return@withLock
+    session.authenticationSteps[session.authenticationSteps.lastIndex] = myPlugin to MyState(completed = true)
+    session.nextStep()
+}
+```
+
+The lock is re-entrant within the same coroutine, so calling `withLock` from a flow route is harmless. Keep the
+work inside the lock short: other requests for the session wait for it.
 
 ## Storage and lifetime {id="storage-and-lifetime"}
 

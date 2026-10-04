@@ -31,6 +31,12 @@ export class TotpPlugin {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ totp_code: this.totp }),
             });
+            if (response.status === 409) {
+                // The step is no longer active, e.g. a duplicate submission. Load the current step instead.
+                await this.authentikt.updateState();
+                this.status = "ready";
+                return;
+            }
             const data = await response.json();
 
             if (data.success === true) {

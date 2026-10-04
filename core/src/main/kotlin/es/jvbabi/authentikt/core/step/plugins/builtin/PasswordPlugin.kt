@@ -1,6 +1,7 @@
 package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
+import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.step.BaseState
@@ -43,8 +44,9 @@ class PasswordPlugin<USER>(
     override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
         with(inRoute) {
             post {
-                val request = call.receive<PasswordRequest>()
                 val session = call.attributes[SessionKey] as Session<USER>
+                if (!session.isActive(this@PasswordPlugin)) return@post call.respondStepNotActive()
+                val request = call.receive<PasswordRequest>()
 
                 val isValid = configuration.checkPassword(session.identifiedUser!!.user, request.password)
 
