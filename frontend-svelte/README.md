@@ -121,7 +121,9 @@ npm run docs         # generate API docs → docs/svelte/
 
 ## Documentation
 
-Generate API docs with TypeDoc:
+- [Documentation](https://julius-babies.github.io/authentikt/), see the "Client (Svelte)" section
+
+Generate the API docs locally with TypeDoc:
 
 ```sh
 npm run docs
