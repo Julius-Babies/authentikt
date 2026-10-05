@@ -29,6 +29,7 @@
             <toc-element topic="junction-plugin.md"/>
             <toc-element topic="done-plugin.md"/>
         </toc-element>
+        <toc-element topic="rate-limiting.md"/>
         <toc-element topic="custom-step-plugins.md"/>
         <toc-element topic="oauth-device-flow.md"/>
     </toc-element>

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { useAuthentiktContext } from "$lib/context";
+    import { formatLockDuration } from "$lib/rate-limit.svelte";
     import { EmailUserSelectionPlugin } from "./EmailUserSelectionPlugin.svelte";
     import type {
         EmailUserSelectionPluginInstance,
@@ -42,14 +43,21 @@
                 type="email"
                 placeholder="Email address"
                 bind:value={plugin.email}
-                class="border p-2 rounded"
+                disabled={plugin.rateLimit?.isLocked}
+                class="border p-2 rounded disabled:opacity-50"
             />
-            {#if plugin.status === "user_not_existing"}
-                <span class="text-red-400 text-sm">User does not exist</span>
+            {#if plugin.rateLimit?.isLocked}
+                <span class="text-red-400 text-sm">
+                    Too many attempts. Try again in {formatLockDuration(plugin.rateLimit.remainingLockSeconds)}.
+                </span>
+            {:else if plugin.status === "user_not_existing"}
+                <span class="text-red-400 text-sm">
+                    User does not exist{#if plugin.rateLimit}, {plugin.rateLimit.remainingTries} {plugin.rateLimit.remainingTries === 1 ? "attempt" : "attempts"} left{/if}
+                </span>
             {/if}
             <button
                 onclick={plugin.submit}
-                disabled={plugin.status === "loading"}
+                disabled={plugin.status === "loading" || plugin.rateLimit?.isLocked}
                 class="bg-blue-600 text-white p-2 rounded disabled:opacity-50"
             >
                 {plugin.status === "loading" ? "Checking..." : "Continue"}

@@ -1,13 +1,15 @@
 import type { Snippet } from "svelte";
+import type { RateLimitState } from "$lib/rate-limit.svelte";
 
 /**
  * Status of the password verification step.
  * - `"ready"`: awaiting user input.
  * - `"loading"`: submitting to server.
  * - `"password_incorrect"`: server rejected the password.
+ * - `"rate_limited"`: too many failed attempts, see `rateLimit`.
  * - `"error"`: network or server error.
  */
-export type PasswordStatus = "ready" | "loading" | "password_incorrect" | "error";
+export type PasswordStatus = "ready" | "loading" | "password_incorrect" | "rate_limited" | "error";
 
 /**
  * Reactive state and actions exposed by the password plugin instance.
@@ -18,6 +20,8 @@ export type PasswordPluginInstance = {
     password: string;
     /** Current verification status. */
     status: PasswordStatus;
+    /** Rate limit of failed attempts, or `null` if attempts are not limited. */
+    rateLimit: RateLimitState | null;
     /** Whether this plugin is the currently active step. */
     isActive: boolean;
     /** Submits the password to the server for verification. */

@@ -1,5 +1,6 @@
 import type { Authentikt } from "$lib/AuthentiktConfiguration.svelte";
 import type { EmailUserSelectionPayload, EmailUserSelectionStatus } from "./types";
+import { RateLimitTracker, type RateLimitState } from "$lib/rate-limit.svelte";
 
 export class EmailUserSelectionPlugin {
     email = $state("");
@@ -7,6 +8,7 @@ export class EmailUserSelectionPlugin {
 
     private readonly _ns: string;
     private readonly authentikt: Authentikt;
+    private readonly rateLimitTracker: RateLimitTracker;
 
     constructor(
         authentikt: Authentikt,
@@ -14,6 +16,12 @@ export class EmailUserSelectionPlugin {
     ) {
         this.authentikt = authentikt;
         this._ns = namespace;
+        this.rateLimitTracker = new RateLimitTracker(authentikt, namespace);
+    }
+
+    /** Rate limit of lookups without a match, or `null` if lookups are not limited. */
+    get rateLimit(): RateLimitState | null {
+        return this.rateLimitTracker.state;
     }
 
     get namespace(): string {
@@ -34,6 +42,7 @@ export class EmailUserSelectionPlugin {
     }
 
     submit = async (): Promise<void> => {
+        if (this.rateLimit?.isLocked) return;
         this.status = "loading";
         try {
             const url = new URL("steps/plugins/" + this._ns, this.authentikt.sessionUrl);
@@ -48,6 +57,12 @@ export class EmailUserSelectionPlugin {
                 this.status = "ready";
                 return;
             }
+            if (response.status === 429) {
+                // Too many lookups without a match. Load the current rate limit to lock the step.
+                await this.authentikt.updateState();
+                this.status = "rate_limited";
+                return;
+            }
             const data = await response.json();
 
             if (data.type === "success") {
@@ -58,6 +73,8 @@ export class EmailUserSelectionPlugin {
                 await this.authentikt.updateState();
                 this.status = "ready";
             } else {
+                // Load the remaining tries
+                await this.authentikt.updateState();
                 this.status = "user_not_existing";
             }
         } catch (e) {

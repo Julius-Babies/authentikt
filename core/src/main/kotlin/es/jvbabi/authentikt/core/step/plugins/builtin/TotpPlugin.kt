@@ -4,6 +4,10 @@ import dev.turingcomplete.kotlinonetimepassword.HmacAlgorithm
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordConfig
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordGenerator
 import es.jvbabi.authentikt.core.AuthentiktInstance
+import es.jvbabi.authentikt.core.ratelimit.RateLimit
+import es.jvbabi.authentikt.core.ratelimit.RateLimiter
+import es.jvbabi.authentikt.core.ratelimit.respondRateLimited
+import es.jvbabi.authentikt.core.ratelimit.triesPer
 import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionKey
@@ -18,6 +22,7 @@ import kotlinx.serialization.Serializable
 import java.util.concurrent.TimeUnit
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaInstant
 
@@ -27,9 +32,12 @@ import kotlin.time.toJavaInstant
  * Validates a TOTP code either by checking against a generated code from a stored secret,
  * or by delegating to a custom validation callback.
  *
+ * Failed attempts are limited per user, see [TotpPluginConfigurationBuilder.rateLimit].
+ *
  * ### Usage
  * ```kotlin
  * install(TotpPlugin {
+ *     rateLimit = 3 triesPer 3.minutes
  *     getSecret { user -> user.totpSecret }
  *     // OR
  *     validate { user, code -> myTotpService.isValid(user, code) }
@@ -47,8 +55,10 @@ class TotpPlugin<USER>(
         .apply(configuration)
         .build()
 
+    private val rateLimiter = this.configuration.rateLimit?.let { RateLimiter.perUser(it) }
+
     override suspend fun createState(session: Session<*>): TotpState {
-        return TotpState(isValidated = false)
+        return TotpState(isValidated = false, rateLimiter = rateLimiter)
     }
 
     override fun installRoutes(inRoute: Route, authentiktInstance: AuthentiktInstance<USER>) {
@@ -58,13 +68,24 @@ class TotpPlugin<USER>(
                 if (!session.isActive(this@TotpPlugin)) return@post call.respondStepNotActive()
                 val request = call.receive<TotpRequest>()
 
-                val success = configuration.check(session.identifiedUser!!.user, request.totp)
-
-                if (success && !session.completeStep(this@TotpPlugin, TotpState(true))) {
-                    return@post call.respondStepNotActive()
+                val attempt = rateLimiter?.tryAcquire(session)
+                if (attempt != null && !attempt.allowed) {
+                    return@post call.respondRateLimited(attempt.status, buildGenericMap { put("success", false) })
                 }
 
-                call.respondGson(buildMap { put("success", success) })
+                val success = configuration.check(session.identifiedUser!!.user, request.totp)
+
+                if (success) {
+                    rateLimiter?.reset(session)
+                    if (!session.completeStep(this@TotpPlugin, TotpState(true, rateLimiter))) {
+                        return@post call.respondStepNotActive()
+                    }
+                }
+
+                call.respondGson(buildGenericMap {
+                    put("success", success)
+                    if (!success) put("rate_limit", attempt?.status?.toClientState())
+                })
             }
         }
     }
@@ -79,12 +100,15 @@ data class TotpRequest(
  * State for the TOTP step.
  *
  * @param isValidated whether the TOTP code was successfully verified.
+ * @param rateLimiter limits failed attempts, or `null` if attempts are not limited.
  */
 data class TotpState(
     val isValidated: Boolean,
+    val rateLimiter: RateLimiter? = null,
 ) : BaseState {
     override suspend fun createClientState(session: Session<*>): Map<String, Any?> = buildGenericMap {
         put("validated", this@TotpState.isValidated)
+        put("rate_limit", rateLimiter?.status(session)?.toClientState())
     }
 
     override suspend fun isCompleted(): Boolean = this.isValidated
@@ -118,6 +142,12 @@ class TotpPluginConfigurationBuilder<USER> {
      * HMAC algorithm used for code generation. Defaults to SHA1.
      */
     var hmacAlgorithm: TotpPluginConfiguration.TotpHmacAlgorithm = TotpPluginConfiguration.TotpHmacAlgorithm.SHA1
+
+    /**
+     * Failed attempts allowed per user, e.g. `3 triesPer 3.minutes`. Defaults to 5 tries per 5 minutes.
+     * Set to `null` to disable the limit.
+     */
+    var rateLimit: RateLimit? = 5 triesPer 5.minutes
 
     /**
      * Sets a custom TOTP validation callback.
@@ -154,6 +184,7 @@ class TotpPluginConfigurationBuilder<USER> {
             hmacAlgorithm = HmacAlgorithm.valueOf(this.hmacAlgorithm.name),
             totpDuration = this.totpDuration,
             getSecret = this.getSecret,
+            rateLimit = this.rateLimit,
         )
     }
 }
@@ -168,6 +199,7 @@ data class TotpPluginConfiguration<USER>(
     val hmacAlgorithm: HmacAlgorithm,
     val totpDuration: Duration,
     val getSecret: TotpPluginConfigurationBuilder.TotpGetSecret<USER>?,
+    val rateLimit: RateLimit?,
 ) {
 
     private val config = TimeBasedOneTimePasswordConfig(

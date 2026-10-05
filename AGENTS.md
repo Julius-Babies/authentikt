@@ -20,6 +20,7 @@ The `core` module contains the library entry point and auth primitives.
 - `core/src/main/kotlin/es/jvbabi/authentikt/core/routes/` contains flow endpoints such as session status checks and plugin routes.
 - `core/src/main/kotlin/es/jvbabi/authentikt/core/session/` manages session state and route-scoped session access.
 - `core/src/main/kotlin/es/jvbabi/authentikt/core/step/plugins/` contains built-in auth steps such as password, TOTP, and done.
+- `core/src/main/kotlin/es/jvbabi/authentikt/core/ratelimit/` contains the `RateLimiter` and the `triesPer` DSL used to limit failed attempts of input steps.
 - `core/src/main/kotlin/es/jvbabi/authentikt/core/userselection/plugins/` contains user-selection plugin APIs and built-ins.
 
 ## Sample Module

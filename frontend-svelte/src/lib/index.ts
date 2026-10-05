@@ -50,6 +50,8 @@ export type {
 export type { JunctionStatus, JunctionSnippet, JunctionPluginInstance } from "./plugins/junction/types";
 
 export type { User } from "./user";
+export type { RateLimitState, RateLimitPayload } from "./rate-limit.svelte";
+export { formatLockDuration } from "./rate-limit.svelte";
 
 export { PasswordPlugin } from "./plugins/password/PasswordPlugin.svelte";
 export { default as PasswordRenderer } from "./plugins/password/PasswordRenderer.svelte";

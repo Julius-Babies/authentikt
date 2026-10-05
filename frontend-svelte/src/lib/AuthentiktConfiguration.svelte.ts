@@ -69,6 +69,9 @@ export class Authentikt {
     /** The current authentication flow state. `null` when no flow is active. */
     currentFlow = $state<FlowState | null>(null);
 
+    /** When the current step was loaded (epoch milliseconds). Relative times in the payload refer to it. */
+    stepReceivedAt = $state(0);
+
     private _registry = $state<PluginEntry[]>([]);
     private _instances = new Map<string, PluginLike>();
 
@@ -272,6 +275,7 @@ export class Authentikt {
         }
         const data = await response.json();
         const { attributes, destination, user, ...stepData } = data;
+        this.stepReceivedAt = Date.now();
         this.currentFlow.step = stepData as FlowStepData;
         this.currentFlow.user = user
             ? { username: user.username, displayName: user.display_name }

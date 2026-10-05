@@ -12,9 +12,10 @@ collects common setup problems.
 
 ### Security
 
-- **No attempt limits.** Password, TOTP and email steps can be retried indefinitely. Add rate limiting, for example
-  with Ktor's [RateLimit](https://ktor.io/docs/server-rate-limit.html) plugin or inside your `checkPassword` and
-  `validate` callbacks.
+- **Rate limits are in memory.** Failed attempts are not shared between instances and are lost on restart. The
+  email step counts attempts per session, so its limit can be bypassed by starting new sessions. Password and TOTP
+  limits are per user, so they can be used to lock a user out for the length of the period. See
+  [](rate-limiting.md).
 - **User enumeration.** The email step tells the client whether an account exists.
 
 ### Protocol

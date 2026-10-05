@@ -75,9 +75,9 @@ Each plugin's routes are mounted under `/flow/{sessionId}/steps/plugins/{namespa
 
 | Namespace | Method | Request body | Response |
 |-----------|--------|--------------|----------|
-| `authentikt-builtin/email` | `POST` | `{ "email": string }` | `{ "type": "success", "username", "display_name" }` or `{ "type": "user_not_found" }` |
-| `authentikt-builtin/password` | `POST` | `{ "password": string }` | `{ "success": boolean }` |
-| `authentikt-builtin/totp` | `POST` | `{ "totp_code": string }` | `{ "success": boolean }` |
+| `authentikt-builtin/email` | `POST` | `{ "email": string }` | `{ "type": "success", "username", "display_name" }` or `{ "type": "user_not_found", "rate_limit"? }` |
+| `authentikt-builtin/password` | `POST` | `{ "password": string }` | `{ "success": boolean, "rate_limit"? }` |
+| `authentikt-builtin/totp` | `POST` | `{ "totp_code": string }` | `{ "success": boolean, "rate_limit"? }` |
 | `authentikt-builtin/oidc` | none | | Redirect to `payload.authorize_url` instead |
 | `authentikt-builtin/junction` | `POST` | `{ "namespace": string }` | `{ "type": "success" }`, or `400` if the namespace is not an option |
 | `authentikt-builtin/done` | `GET` | | `{ "type": "success" \| "redirect" \| "device_flow_success", "to"?, "cookies"? }` |
@@ -140,3 +140,6 @@ Requests to a step that is not the session's active step, for example a duplicat
 
 Validation failures (wrong password, unknown user) are returned with status `200` and a negative body, as listed
 above.
+
+Submissions to a [rate-limited](rate-limiting.md) step that is locked are answered with `429 Too Many Requests` and
+a `Retry-After` header. The body contains `"error": "rate_limited"` and the step's `rate_limit` state.
