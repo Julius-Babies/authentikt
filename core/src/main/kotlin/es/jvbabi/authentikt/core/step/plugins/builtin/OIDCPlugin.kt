@@ -24,12 +24,11 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.*
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import kotlinx.serialization.json.JsonObject
 
 class OIDCPlugin<USER>(
     configuration: OIDCPluginConfigurationBuilder<USER>.() -> Unit,
@@ -132,10 +131,19 @@ class OIDCPlugin<USER>(
                         return@get
                     }
 
-                    val tokenResponseBody = tokenResponse.body<OIDCTokenResponse>()
+                    val tokens = try {
+                        OIDCTokens.fromTokenResponse(
+                            response = tokenResponse.body<JsonObject>(),
+                            receivedAt = session.clock.now(),
+                        )
+                    } catch (e: Exception) {
+                        logger.warn("Invalid token response in session ${session.sessionId}: ${e.message}")
+                        call.respondText("Invalid token response", status = HttpStatusCode.BadGateway)
+                        return@get
+                    }
 
                     if (idTokenVerifier != null) {
-                        val idToken = tokenResponseBody.idToken
+                        val idToken = tokens.idToken
                         val idTokenError = if (idToken == null) "The token response contains no ID token"
                         else idTokenVerifier.verify(idToken, oidcState.nonce, session.clock)
                         if (idTokenError != null) {
@@ -146,7 +154,7 @@ class OIDCPlugin<USER>(
                     }
 
                     val userResponse = httpClient.get(configuration.userInfoEndpoint.toString()) {
-                        bearerAuth(tokenResponseBody.accessToken)
+                        bearerAuth(tokens.accessToken)
                     }
                     if (!userResponse.status.isSuccess()) {
                         logger.warn("Failed to fetch user info in session ${session.sessionId}: ${userResponse.status} ${userResponse.bodyAsText()}")
@@ -155,7 +163,7 @@ class OIDCPlugin<USER>(
                     }
 
 
-                    val result = configuration.onUserInfo(userResponse, tokenResponseBody.accessToken)
+                    val result = configuration.onUserInfo(OIDCUserInfoScope(tokens), userResponse, tokens.accessToken)
                     when (result) {
                         is UserInfo.Result.Success -> {
                             val activeState = session.authenticationSteps.lastOrNull()?.second as? OIDCPluginState
@@ -203,6 +211,7 @@ class OIDCPlugin<USER>(
             parameters.append("code_challenge", codeChallengeS256(codeVerifier))
             parameters.append("code_challenge_method", "S256")
             parameters.append("nonce", nonce)
+            configuration.authorizationParameters.forEach { (name, value) -> parameters.append(name, value) }
         }.build()
         return OIDCPluginState(
             url = url,
@@ -284,6 +293,10 @@ data class OIDCPluginState(
     }
 }
 
+private val reservedAuthorizationParameters = setOf(
+    "client_id", "response_type", "scope", "redirect_uri", "state", "code_challenge", "code_challenge_method", "nonce",
+)
+
 class OIDCPluginConfigurationBuilder<USER> {
     private var _clientId: String? = null
     var clientId: String
@@ -324,6 +337,17 @@ class OIDCPluginConfigurationBuilder<USER> {
         this.scopes.addAll(scopes)
     }
 
+    private val authorizationParameters = mutableListOf<Pair<String, String>>()
+
+    /**
+     * Adds an additional query parameter to the authorization URL, for example `access_type=offline` and
+     * `prompt=consent`, which Google requires to issue a refresh token.
+     */
+    fun authorizationParameter(name: String, value: String) {
+        require(name !in reservedAuthorizationParameters) { "Authorization parameter '$name' is set by the plugin" }
+        authorizationParameters.add(name to value)
+    }
+
     var applicationName = "default"
 
     /**
@@ -360,6 +384,7 @@ class OIDCPluginConfigurationBuilder<USER> {
             clientId = _clientId!!,
             clientSecret = _clientSecret!!,
             scopes = scopes,
+            authorizationParameters = authorizationParameters.toList(),
             authorizationEndpoint = Url(_authorizationEndpoint!!),
             tokenUrl = Url(_tokenEndpoint!!),
             userInfoEndpoint = Url(_userInfoEndpoint!!),
@@ -375,6 +400,7 @@ internal data class OIDCPluginConfiguration<USER>(
     val clientId: String,
     val clientSecret: String,
     val scopes: List<String>,
+    val authorizationParameters: List<Pair<String, String>>,
     val authorizationEndpoint: Url,
     val tokenUrl: Url,
     val userInfoEndpoint: Url,
@@ -382,14 +408,9 @@ internal data class OIDCPluginConfiguration<USER>(
     val jwksUri: Url?,
     val onUserInfo: OnUserInfo<USER>,
 ) {
-    typealias OnUserInfo<USER> = suspend (response: HttpResponse, accessToken: String) -> UserInfo.Result<USER>
+    typealias OnUserInfo<USER> =
+        suspend OIDCUserInfoScope.(response: HttpResponse, accessToken: String) -> UserInfo.Result<USER>
 }
-
-@Serializable
-private data class OIDCTokenResponse(
-    @SerialName("access_token") val accessToken: String,
-    @SerialName("id_token") val idToken: String? = null,
-)
 
 class UserInfo {
     sealed class Result<out USER> {

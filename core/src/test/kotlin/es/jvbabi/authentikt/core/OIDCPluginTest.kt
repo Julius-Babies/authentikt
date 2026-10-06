@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer
 import es.jvbabi.authentikt.core.session.sessions
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
 import es.jvbabi.authentikt.core.step.plugins.builtin.OIDCPlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.OIDCTokens
 import es.jvbabi.authentikt.core.step.plugins.builtin.UserInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -41,6 +42,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 private fun oidcTestUser(name: String) = object : AuthentiktUser<String>(name) {
     override suspend fun getEmail(): String = "$name@example.com"
@@ -80,7 +82,7 @@ private class MockOIDCProvider {
             val form = parseQueryString(exchange.requestBody.readBytes().decodeToString())
             tokenRequests += form.entries().associate { it.key to it.value.first() }
             val response = buildString {
-                append("""{"access_token":"access-token","token_type":"Bearer"""")
+                append("""{"access_token":"access-token","token_type":"Bearer","refresh_token":"refresh-token","expires_in":300,"scope":"openid email"""")
                 if (issueIdToken) {
                     val nonce = idTokenNonce ?: expectedNonce.orEmpty()
                     append(""","id_token":"${idTokenOverride?.invoke(nonce) ?: idToken(nonce)}"""")
@@ -172,11 +174,14 @@ class OIDCPluginTest {
         jwksUri = "${provider.baseUrl}/jwks"
         scopes("openid", "email")
         onUserInfo { response, _ ->
+            receivedTokens = tokens
             val email = response.body<JsonObject>()["email"]?.jsonPrimitive?.content
             if (email == "alice@example.com") UserInfo.Result.Success(oidcTestUser("alice"))
             else UserInfo.Result.Failure("unknown user")
         }
     }
+
+    private var receivedTokens: OIDCTokens? = null
 
     private val donePlugin = DonePlugin<String> { onSuccess { _, _ -> } }
 
@@ -232,6 +237,13 @@ class OIDCPluginTest {
         assertEquals(challenge, s256(tokenRequest.getValue("code_verifier")))
         assertTrue(session.has(plugin))
         assertEquals("alice", session.identifiedUser?.user)
+
+        val tokens = assertNotNull(receivedTokens)
+        assertEquals("access-token", tokens.accessToken)
+        assertEquals("refresh-token", tokens.refreshToken)
+        assertEquals(300.seconds, tokens.expiresIn)
+        assertEquals(listOf("openid", "email"), tokens.scopes)
+        assertNotNull(tokens.idToken)
     }
 
     @Test
