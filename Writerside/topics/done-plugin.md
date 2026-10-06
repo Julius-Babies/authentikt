@@ -38,8 +38,10 @@ val donePlugin = DonePlugin<User> {
 a [`DonePluginScope`](#scope).
 
 `onOAuthSuccess { session, user -> OAuthAccessToken }`
-: Called when a device that is waiting in the [device flow](oauth-device-flow.md) exchanges its device code. It
-returns the token the device receives. This callback is required as soon as `oauth { }` is configured.
+: Called when an OAuth client exchanges an [authorization code](oauth-device-flow.md#authorization-code) or a device
+that is waiting in the [device flow](oauth-device-flow.md#device-flow) exchanges its device code at `/oauth/token`. It
+returns the token the client receives. `session.destination` tells you which client it is for. This callback is
+required as soon as `oauth { }` is configured.
 
 ### DonePluginScope {id="scope"}
 
@@ -58,8 +60,13 @@ When the client calls the step:
 1. **Device flow sessions** (`session.destination is SessionDestination.DeviceFlow`): `onSuccess` is not called.
    The response is `device_flow_success`, and the browser can tell the user to return to their device. The device
    gets its token from `/oauth/token`.
-2. **First call of a regular session**: `onSuccess` runs, cookies are attached, and the step is marked completed.
-3. **Later calls**: return `{ "type": "success" }` without running `onSuccess` again.
+2. **OAuth sessions** (`session.destination is SessionDestination.OAuth`, started by `/oauth/authorize`): `onSuccess`
+   runs and its cookies are attached, so the user is also logged in to your app. A `redirect(...)` from `onSuccess` is
+   ignored (and logged as a warning): a single-use authorization code is issued, and the response is a `redirect` to
+   `redirect_uri?code=...&state=...`. The client exchanges the code at `/oauth/token`, which runs `onOAuthSuccess`.
+   Repeated calls return the same redirect without running `onSuccess` again.
+3. **First call of a regular session**: `onSuccess` runs, cookies are attached, and the step is marked completed.
+4. **Later calls**: return `{ "type": "success" }` without running `onSuccess` again.
 
 > Cookies are set on the response to the browser's `fetch` call. Browsers only store them if the frontend and the
 > API share an origin, or if your CORS and cookie settings explicitly allow cross-site credentials. See
@@ -80,6 +87,10 @@ When the client calls the step:
 
 ```json
 { "type": "redirect", "to": "https://example.com/dashboard", "cookies": ["auth_token"] }
+```
+
+```json
+{ "type": "redirect", "to": "https://app.example/callback?code=...&state=..." }
 ```
 
 ```json

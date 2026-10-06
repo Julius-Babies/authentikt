@@ -1,11 +1,15 @@
 package es.jvbabi.authentikt.core
 
 import es.jvbabi.authentikt.core.config.*
+import es.jvbabi.authentikt.core.oauth.handleAuthorizationCodeTokenRequest
+import es.jvbabi.authentikt.core.oauth.handleAuthorizeRequest
+import es.jvbabi.authentikt.core.oauth.removeExpiredAuthorizationCodes
+import es.jvbabi.authentikt.core.oauth.respondAccessToken
+import es.jvbabi.authentikt.core.oauth.respondOAuthError
 import es.jvbabi.authentikt.core.routes.flow.alternatives.switchToAlternative
 import es.jvbabi.authentikt.core.routes.flow.check.checkFlowStatus
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination.DeviceFlow
-import es.jvbabi.authentikt.core.session.SessionDestination.OAuth
 import es.jvbabi.authentikt.core.session.SessionKey
 import es.jvbabi.authentikt.core.session.findActiveSession
 import es.jvbabi.authentikt.core.session.removeExpiredSessions
@@ -134,7 +138,7 @@ internal lateinit var authentiktPluginConfiguration: AuthentiktConfiguration<*>
  * POST /flow/{id}/alternatives        → Switches to an alternative of the active step (optional)
  * POST /flow/{id}/steps/plugins/…     → Validates step
  * … repeat …
- * GET  /flow/{id}/steps/plugins/done  → Generates token, ends the session
+ * GET  /flow/{id}/steps/plugins/done  → Generates token (or OAuth authorization code), ends the session
  * ```
  *
  * Sessions expire after [AuthentiktPluginConfigurationBuilder.sessionTimeout] without activity. Requests for
@@ -159,6 +163,7 @@ fun <USER> Application.installAuthentikt(
         while (isActive) {
             delay(configuration.sessionCleanupInterval)
             removeExpiredSessions()
+            removeExpiredAuthorizationCodes(configuration.clock.now())
         }
     }
 
@@ -171,40 +176,32 @@ fun <USER> Application.installAuthentikt(
 
             route("/oauth") {
                 if (configuration.oAuthConfiguration.onAuthorize != null) get("/authorize") {
-                    val clientId = call.parameters["client_id"]!!
-                    val redirectUri = call.parameters["redirect_uri"]!!
-                    when (val result = configuration.oAuthConfiguration.onAuthorize(clientId, redirectUri)) {
-                        is OAuthAuthorizationResult.Error -> call.respondText(
-                            result.error,
-                            status = HttpStatusCode.BadRequest
-                        )
-
-                        is OAuthAuthorizationResult.Application -> {
-                            val session = authentiktInstance.createNewSession(destination = OAuth(
-                                redirectUri = result.redirectUri,
-                                applicationId = result.clientId,
-                                applicationName = result.name,
-                            ))
-                            val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
-                                parameters.append("_authentikt_flow_active", "true")
-                                parameters.append("_authentikt_session_id", session.sessionId)
-                            }.build()
-
-                            call.respondRedirect(webUiRedirectUrl, permanent = false)
-                        }
-                    }
+                    call.handleAuthorizeRequest(authentiktInstance)
                 }
 
                 post("/token") {
                     val params = call.receiveParameters()
-                    val grantType = params["grant_type"]!!
+                    val grantType = params["grant_type"]
 
                     when (grantType) {
-                        "urn:ietf:params:oauth:grant-type:device_code" -> {
-                            requireNotNull(configuration.oAuthConfiguration.onDeviceFlowAuthorize) { "Device flow is not enabled" }
+                        null, "" -> call.respondOAuthError("invalid_request", "Missing grant_type parameter.")
 
-                            val deviceCode = params["device_code"]!!
-                            val clientId = params["client_id"]!!
+                        "authorization_code" if configuration.oAuthConfiguration.onAuthorize != null -> {
+                            @Suppress("UNCHECKED_CAST")
+                            call.handleAuthorizationCodeTokenRequest(
+                                params = params,
+                                oAuthConfiguration = configuration.oAuthConfiguration,
+                                donePlugin = donePlugin as DonePlugin<USER>,
+                            )
+                        }
+
+                        "urn:ietf:params:oauth:grant-type:device_code" if configuration.oAuthConfiguration.onDeviceFlowAuthorize != null -> {
+                            val deviceCode = params["device_code"]
+                            val clientId = params["client_id"]
+                            if (deviceCode.isNullOrEmpty() || clientId.isNullOrEmpty()) {
+                                call.respondOAuthError("invalid_request", "Missing device_code or client_id parameter.")
+                                return@post
+                            }
 
                             val session = sessions.values.find { session -> session.destination is DeviceFlow && session.destination.deviceCode == deviceCode && session.destination.applicationId == clientId }
                                 as? Session<USER>
@@ -270,20 +267,13 @@ fun <USER> Application.installAuthentikt(
                                 session.authenticationSteps[session.authenticationSteps.lastIndex] = step to DoneState(completed = true)
                                 // Redeemed: later polls find no session and receive expired_token
                                 session.invalidate()
-                                call.respondGson(
-                                    buildGenericMap {
-                                        put("access_token", accessToken.accessToken)
-                                        put("token_type", "bearer")
-                                        put("expires_in", accessToken.expiresIn.inWholeSeconds)
-                                        put("refresh_token", accessToken.refreshToken)
-                                    }
-                                )
+                                call.respondAccessToken(accessToken)
                             }
                         }
 
-                        else -> call.respondText(
-                            "Unsupported grant type",
-                            status = HttpStatusCode.BadRequest
+                        else -> call.respondOAuthError(
+                            "unsupported_grant_type",
+                            "The grant type $grantType is not supported.",
                         )
                     }
                 }
@@ -291,15 +281,19 @@ fun <USER> Application.installAuthentikt(
                 if (configuration.oAuthConfiguration.onDeviceFlowAuthorize != null) {
                     post("/device/code") {
                         val body = call.receiveParameters()
-                        val clientId = body["client_id"]!!
+                        val clientId = body["client_id"]
+                        if (clientId.isNullOrEmpty()) {
+                            call.respondOAuthError("invalid_request", "Missing client_id parameter.")
+                            return@post
+                        }
 
                         when (val result = configuration.oAuthConfiguration.onDeviceFlowAuthorize(
                             ValidateDeviceFlowAuthorizationCallbackScope(),
                             clientId
                         )) {
-                            is OAuthDeviceFlowAuthorizationResult.Error -> call.respondText(
+                            is OAuthDeviceFlowAuthorizationResult.Error -> call.respondOAuthError(
+                                "invalid_client",
                                 result.error,
-                                status = HttpStatusCode.BadRequest
                             )
 
                             is OAuthDeviceFlowAuthorizationResult.Application -> {

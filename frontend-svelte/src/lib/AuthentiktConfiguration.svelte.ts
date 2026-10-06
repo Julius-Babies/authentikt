@@ -40,7 +40,7 @@ export type FlowStepData = {
 export type FlowDestination =
     | { type: "none" }
     | { type: "device_flow"; application_id: string; application_name: string }
-    | { type: "oauth"; application_id: string; application_name: string; redirect_uri: string };
+    | { type: "oauth"; application_id: string; application_name: string; redirect_uri: string; scopes: string[] };
 
 /**
  * Complete state of an active authentication flow.

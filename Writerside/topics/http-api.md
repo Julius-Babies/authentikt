@@ -80,7 +80,7 @@ Each plugin's routes are mounted under `/flow/{sessionId}/steps/plugins/{namespa
 | `authentikt-builtin/totp` | `POST` | `{ "totp_code": string }` | `{ "success": boolean, "rate_limit"? }` |
 | `authentikt-builtin/oidc` | none | | Redirect to `payload.authorize_url` instead |
 | `authentikt-builtin/junction` | `POST` | `{ "namespace": string }` | `{ "type": "success" }`, or `400` if the namespace is not an option |
-| `authentikt-builtin/done` | `GET` | | `{ "type": "success" \| "redirect" \| "device_flow_success", "to"?, "cookies"? }` |
+| `authentikt-builtin/done` | `GET` | | `{ "type": "success" \| "redirect" \| "device_flow_success", "to"?, "cookies"? }` (OAuth sessions: `redirect` to the client with the authorization code) |
 
 After a successful step submission, call `check` again to get the next step.
 
@@ -101,14 +101,19 @@ Only present when `oauth { }` is configured. They are mounted at the server root
 
 | Route | Present when | Description |
 |-------|--------------|-------------|
+| `GET /oauth/authorize` | `onAuthorize` is set | Starts an authorization code flow and redirects to `uiLoginBaseUrl` |
 | `POST /oauth/device/code` | `onDeviceFlow` is set | Starts a device flow |
-| `POST /oauth/token` | always | Exchanges a device code for a token |
+| `POST /oauth/token` | always | Exchanges an authorization code or a device code for a token |
+
+Errors of the OAuth routes use the format of [RFC 6749, section 5.2](https://datatracker.ietf.org/doc/html/rfc6749#section-5.2):
+`{ "error": "...", "error_description": "..." }`.
 
 Details and responses: [](oauth-device-flow.md).
 
 ## URL parameters for resuming
 
-Whenever the server sends the browser to `uiLoginBaseUrl` (after OIDC and in device-flow verification URIs), it appends:
+Whenever the server sends the browser to `uiLoginBaseUrl` (after OIDC, after `/oauth/authorize` and in device-flow
+verification URIs), it appends:
 
 ```
 ?_authentikt_flow_active=true&_authentikt_session_id=<session id>

@@ -52,6 +52,8 @@ you can keep the default UI or replace it with your own snippet.
   library. You can write your own in a few dozen lines.
 - **Full control over the step order** through one callback.
 - **Session attributes** for passing data between steps or to the frontend.
+- **OAuth 2.0 Authorization Code Grant** with PKCE (RFC 6749, RFC 7636), so your own applications can sign users in
+  through your login page.
 - **OAuth 2.0 Device Authorization Grant** (RFC 8628), so TVs, CLIs and other input-constrained devices can sign in
   through your login page.
 - **Headless Svelte 5 client** built on runes, with optional default UI and snippet-based customization.

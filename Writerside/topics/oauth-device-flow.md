@@ -1,9 +1,13 @@
-# OAuth and device flow
+# OAuth: authorization code and device flow
 
-authentikt can act as a small OAuth 2.0 authorization server for your own applications. It supports the
-**Device Authorization Grant** ([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)): a TV app, a CLI or
-another device without a comfortable keyboard shows a link, the user finishes the login on their phone or laptop
-with your normal authentikt login page, and the device receives an access token.
+authentikt can act as a small OAuth 2.0 authorization server for your own applications. It supports two grants:
+
+- The **Authorization Code Grant** ([RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)) with
+  **PKCE** ([RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636)): a web, mobile or desktop app sends the
+  browser to your login page and receives an authorization code, which it exchanges for an access token.
+- The **Device Authorization Grant** ([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628)): a TV app, a CLI or
+  another device without a comfortable keyboard shows a link, the user finishes the login on their phone or laptop
+  with your normal authentikt login page, and the device receives an access token.
 
 ## Enabling OAuth
 
@@ -28,6 +32,15 @@ installAuthentikt<User> {
     // baseUrl, uiLoginBaseUrl, plugins, authorization { ... }
 
     oauth {
+        onAuthorize { clientId, redirectUri ->
+            val client = clientRegistry.find(clientId)
+                ?: return@onAuthorize OAuthAuthorizationResult.Error("Unknown client")
+            if (redirectUri !in client.redirectUris) {
+                return@onAuthorize OAuthAuthorizationResult.Error("Unknown redirect URI")
+            }
+            OAuthAuthorizationResult.Application(clientId, redirectUri, name = client.name)
+        }
+
         onDeviceFlow { clientId ->
             if (clientId != "acme-tv-app") {
                 return@onDeviceFlow OAuthDeviceFlowAuthorizationResult.Error("Unknown client")
@@ -46,9 +59,128 @@ installAuthentikt<User> {
 > When `oauth { }` is present, startup fails unless a `DonePlugin` with `onOAuthSuccess` is installed.
 {style="note"}
 
-The OAuth routes are mounted at the **server root** (`/oauth/...`), not under `apiPrefix`.
+The OAuth routes are mounted at the **server root** (`/oauth/...`), not under `apiPrefix`. Their errors use the
+format of [RFC 6749, section 5.2](https://datatracker.ietf.org/doc/html/rfc6749#section-5.2):
 
-## Device flow
+```json
+{ "error": "invalid_request", "error_description": "Missing client_id parameter." }
+```
+
+## Authorization code flow {id="authorization-code"}
+
+### Configuration {id="authorization-code-configuration"}
+
+`onAuthorize { clientId, redirectUri -> OAuthAuthorizationResult }`
+: Enables `GET /oauth/authorize`. Validate the client ID and the redirect URI and return either:
+
+- `OAuthAuthorizationResult.Application(clientId, redirectUri, name, scopes = null)`: `name` is shown on the login
+  page. `redirectUri` is where the browser is sent with the code. `scopes` are the granted scopes; `null` grants all
+  requested scopes, a subset grants fewer.
+- `OAuthAuthorizationResult.Error(message)`: the browser is **not** redirected and receives `400` with `invalid_request`
+  and the message.
+
+Inside the block, `scopes` contains the scopes requested with the `scope` parameter.
+
+> Only accept redirect URIs that are registered for the client. Otherwise anyone can send the authorization code of
+> your users to their own server.
+{style="warning"}
+
+`authenticateClient { clientId, clientSecret -> Boolean }`
+: Verifies the credentials of confidential clients at `POST /oauth/token`. Without it, only public clients that use
+PKCE can use this grant, and `/oauth/authorize` rejects requests without `code_challenge`.
+
+`authorizationCodeLifetime` (default: `1.minutes`)
+: How long an authorization code can be exchanged after it was issued.
+
+### Sequence {id="authorization-code-sequence"}
+
+```mermaid
+sequenceDiagram
+    participant C as Client app
+    participant B as Browser
+    participant K as authentikt-core
+
+    C->>B: redirect to /oauth/authorize (client_id, redirect_uri, state, code_challenge)
+    B->>K: GET /oauth/authorize
+    K->>K: onAuthorize, create session with OAuth destination
+    K-->>B: redirect to uiLoginBaseUrl
+    B->>K: normal login flow
+    B->>K: GET .../steps/plugins/authentikt-builtin/done
+    K-->>B: redirect to redirect_uri?code=...&state=...
+    B->>C: GET redirect_uri?code=...&state=...
+    C->>K: POST /oauth/token (code, redirect_uri, code_verifier or client secret)
+    K->>K: onOAuthSuccess
+    K-->>C: access_token
+```
+
+1. The client sends the browser to `GET /oauth/authorize`. authentikt calls `onAuthorize`, creates a session whose
+   destination is `SessionDestination.OAuth` and redirects the browser to `uiLoginBaseUrl`.
+2. The user logs in. Your step-order callback runs as usual, and you can branch on
+   `session.destination is SessionDestination.OAuth`.
+3. When the user reaches the `DonePlugin`, `onSuccess` runs and its cookies are set, so the user is also logged in to
+   your app. A `redirect(...)` from `onSuccess` is ignored. A single-use authorization code is issued, the session
+   ends, and the `DonePlugin` responds with a `redirect` to `redirect_uri?code=...&state=...`. The
+   [`DoneRenderer`](frontend-renderers.md#done) follows it.
+4. The client exchanges the code at `POST /oauth/token`. authentikt runs `onOAuthSuccess` and returns the token.
+
+On the login page, `auth.currentFlow.destination` contains the application name and the granted `scopes`.
+
+### GET /oauth/authorize
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `response_type` | yes | Must be `code` |
+| `client_id` | yes | Passed to `onAuthorize` |
+| `redirect_uri` | yes | Passed to `onAuthorize`. The token request must repeat it exactly |
+| `state` | recommended | Returned unchanged with the code. Use it to protect against CSRF |
+| `scope` | no | Space-separated scopes, available as `scopes` in `onAuthorize` |
+| `code_challenge` | without `authenticateClient` | `BASE64URL(SHA256(code_verifier))` |
+| `code_challenge_method` | with `code_challenge` | Must be `S256`. `plain` is not supported |
+
+A missing `client_id` or `redirect_uri` and an `Error` from `onAuthorize` are answered with `400`. All other errors
+are sent to the redirect URI as `redirect_uri?error=...&error_description=...&state=...`, for example
+`unsupported_response_type` or `invalid_request` for a missing or invalid PKCE challenge.
+
+### POST /oauth/token (authorization code) {id="token-authorization-code"}
+
+Form-encoded request:
+
+| Parameter | Value |
+|-----------|-------|
+| `grant_type` | `authorization_code` |
+| `code` | The code from the redirect |
+| `redirect_uri` | The same `redirect_uri` as in the authorization request |
+| `client_id` | The client ID. Can be omitted when the client authenticates with HTTP Basic |
+| `code_verifier` | The PKCE verifier, if a `code_challenge` was sent |
+| `client_secret` | The client secret, if the client does not use HTTP Basic |
+
+Confidential clients authenticate with HTTP Basic (`Authorization: Basic base64(client_id:client_secret)`) or the
+`client_secret` parameter; both are checked with `authenticateClient`. A code without a PKCE challenge can only be
+exchanged by an authenticated client.
+
+Success response:
+
+```json
+{
+  "access_token": "...",
+  "token_type": "bearer",
+  "expires_in": 604800,
+  "refresh_token": null,
+  "scope": "profile email"
+}
+```
+
+`scope` is omitted when no scopes were granted.
+
+| `error` | Status | Meaning |
+|---------|--------|---------|
+| `invalid_request` | `400` | A required parameter is missing |
+| `invalid_client` | `401` | Client authentication failed or is required |
+| `invalid_grant` | `400` | Unknown, expired or already used code, or `client_id`, `redirect_uri` or `code_verifier` do not match |
+
+Every code can be presented only once, even if the request fails.
+
+## Device flow {id="device-flow"}
 
 ### Configuration
 
@@ -58,7 +190,8 @@ The OAuth routes are mounted at the **server root** (`/oauth/...`), not under `a
 - `OAuthDeviceFlowAuthorizationResult.Application(clientId, name, deviceCode, userCode)`: `name` is shown on the
   login page, `deviceCode` is the secret the device polls with (make it long and random), and `userCode` is a
   short code for display.
-- `OAuthDeviceFlowAuthorizationResult.Error(message)`: responds with `400` and the message.
+- `OAuthDeviceFlowAuthorizationResult.Error(message)`: responds with `400`, `invalid_client` and the message as
+  `error_description`.
 
 Inside the block, `generateUserCode()` returns a random six-character code made of digits 1 to 9 and upper- and
 lowercase letters.
@@ -141,7 +274,7 @@ Response:
 }
 ```
 
-#### POST /oauth/token
+#### POST /oauth/token (device code) {id="token-device-code"}
 
 Form-encoded request:
 
@@ -170,7 +303,8 @@ Error responses (status `400`), as defined by RFC 8628:
 | `slow_down` | The device polled faster than the current interval | Add 5 seconds to the interval and keep polling |
 | `expired_token` | Unknown device code, already redeemed, or `deviceCodeLifetime` has passed | Stop and start over |
 
-Other grant types are answered with `400 Unsupported grant type`.
+Other grant types, and grants whose callback is not configured, are answered with `400` and
+`unsupported_grant_type`. A missing parameter is answered with `invalid_request`.
 
 ### Example device client
 

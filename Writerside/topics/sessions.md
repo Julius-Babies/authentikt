@@ -99,6 +99,10 @@ Public attributes are serialized with Gson. Stick to primitives, strings, lists 
 A destination describes who receives the result of the login. It has an `applicationId` and an
 `applicationName`:
 
+`SessionDestination.OAuth(redirectUri, applicationId, applicationName, scopes)`
+: Created by `GET /oauth/authorize`. A client application waits for an authorization code at `redirectUri`.
+`scopes` are the granted scopes. See [](oauth-device-flow.md#authorization-code).
+
 `SessionDestination.DeviceFlow(deviceCode, userCode, applicationId, applicationName)`
 : Created by `POST /oauth/device/code`. A device is waiting for the user to finish the login. See
 [](oauth-device-flow.md).

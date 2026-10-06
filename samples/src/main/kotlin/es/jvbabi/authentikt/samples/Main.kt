@@ -129,7 +129,10 @@ fun Application.module() {
                 )
             )
 
-            redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
+            // OAuth sessions are redirected to the client's redirect_uri; the cookie above still logs the user in here
+            if (session.destination == null) {
+                redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
+            }
         }
 
         onOAuthSuccess { session, user ->
@@ -176,8 +179,22 @@ fun Application.module() {
         oauth {
             deviceCodeLifetime = 10.minutes
 
+            // Authorization code grant: GET /oauth/authorize?response_type=code&client_id=authentikt-web-app
+            //   &redirect_uri=http://localhost:3000/callback&state=...&code_challenge=...&code_challenge_method=S256
             onAuthorize { clientId, redirectUri ->
-                OAuthAuthorizationResult.Application(clientId, redirectUri, "Authentikt TV App")
+                if (clientId != "authentikt-web-app") return@onAuthorize OAuthAuthorizationResult.Error("Unknown client")
+                if (redirectUri != "http://localhost:3000/callback") return@onAuthorize OAuthAuthorizationResult.Error("Unknown redirect URI")
+                OAuthAuthorizationResult.Application(
+                    clientId = clientId,
+                    redirectUri = redirectUri,
+                    name = "Authentikt Web App",
+                    scopes = scopes.filter { it in setOf("profile", "email") },
+                )
+            }
+
+            // Confidential clients may authenticate at /oauth/token instead of using PKCE
+            authenticateClient { clientId, clientSecret ->
+                clientId == "authentikt-web-app" && clientSecret == "web-app-secret"
             }
 
             onDeviceFlow { clientId ->
