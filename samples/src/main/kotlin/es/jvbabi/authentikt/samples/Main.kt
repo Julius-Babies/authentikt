@@ -197,6 +197,15 @@ fun Application.module() {
                 )
             }
 
+            // Single sign-on: users logged in through the SessionToken cookie set in onSuccess skip the login UI
+            loggedInUser { call, _ ->
+                call.request.cookies["SessionToken"]
+                    ?.takeIf { it.startsWith("token-for-") }
+                    ?.removePrefix("token-for-")
+                    ?.let { email -> users.find { it.email == email } }
+                    ?.toAuthentiktUser()
+            }
+
             // Confidential clients may authenticate at /oauth/token instead of using PKCE
             authenticateClient { clientId, clientSecret ->
                 clientId == "authentikt-web-app" && clientSecret == "web-app-secret"

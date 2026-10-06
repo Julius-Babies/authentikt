@@ -92,6 +92,9 @@ PKCE can use this grant, and `/oauth/authorize` rejects requests without `code_c
 `authorizationCodeLifetime` (default: `1.minutes`)
 : How long an authorization code can be exchanged after it was issued.
 
+`loggedInUser { call, application -> AuthentiktUser<USER>? }`
+: Enables single sign-on, see [](#single-sign-on).
+
 ### Sequence {id="authorization-code-sequence"}
 
 ```mermaid
@@ -103,10 +106,14 @@ sequenceDiagram
     C->>B: redirect to /oauth/authorize (client_id, redirect_uri, state, code_challenge)
     B->>K: GET /oauth/authorize
     K->>K: onAuthorize, create session with OAuth destination
-    K-->>B: redirect to uiLoginBaseUrl
-    B->>K: normal login flow
-    B->>K: GET .../steps/plugins/authentikt-builtin/done
-    K-->>B: redirect to redirect_uri?code=...&state=...
+    alt loggedInUser returns a user (single sign-on)
+        K-->>B: redirect to redirect_uri?code=...&state=...
+    else
+        K-->>B: redirect to uiLoginBaseUrl
+        B->>K: normal login flow
+        B->>K: GET .../steps/plugins/authentikt-builtin/done
+        K-->>B: redirect to redirect_uri?code=...&state=...
+    end
     B->>C: GET redirect_uri?code=...&state=...
     C->>K: POST /oauth/token (code, redirect_uri, code_verifier or client secret)
     K->>K: onOAuthSuccess
@@ -125,6 +132,45 @@ sequenceDiagram
 
 On the login page, `auth.currentFlow.destination` contains the application name and the granted `scopes`.
 
+### Single sign-on {id="single-sign-on"}
+
+Without further configuration, every `/oauth/authorize` request shows the login UI, even if the user has just logged
+in. With `loggedInUser`, you can recognize a user who is already logged in to your app, usually through the cookie set
+in `onSuccess`:
+
+```kotlin
+oauth {
+    onAuthorize { clientId, redirectUri -> /* ... */ }
+
+    loggedInUser { call, application ->
+        val token = call.request.cookies["SessionToken"] ?: return@loggedInUser null
+        sessionRepository.findUser(token)?.toAuthentiktUser()
+    }
+}
+```
+
+`loggedInUser` is called after `onAuthorize` accepted the request, with the Ktor `ApplicationCall` and the
+`OAuthAuthorizationResult.Application` returned by `onAuthorize`. If it returns a user, the authorization code is
+issued immediately and the browser is redirected to `redirect_uri?code=...&state=...` without showing the login UI.
+`onSuccess` does not run in this case; `onOAuthSuccess` runs as usual when the code is exchanged. If it returns
+`null`, the normal login flow starts.
+
+The client can control this with the `prompt` parameter
+([OpenID Connect Core, section 3.1.2.1](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest)):
+
+| `prompt` | Behaviour |
+|----------|-----------|
+| not set | Single sign-on if `loggedInUser` returns a user, otherwise the login UI |
+| `login` | Always shows the login UI. `loggedInUser` is not called |
+| `none` | Never shows the login UI. If `loggedInUser` returns `null` (or is not configured), the browser is redirected with `error=login_required` |
+
+Other values (`consent`, `select_account`) are accepted and ignored. `none` cannot be combined with other values.
+
+> The user is not asked for consent. Only return a user for clients you trust to be authorized silently, and check
+> `application.clientId` if some clients should always show the login UI. Make sure the login you recognize meets
+> the requirements of the client, for example that it included a second factor.
+{style="warning"}
+
 ### GET /oauth/authorize
 
 | Parameter | Required | Description |
@@ -136,10 +182,12 @@ On the login page, `auth.currentFlow.destination` contains the application name 
 | `scope` | no | Space-separated scopes, available as `scopes` in `onAuthorize` |
 | `code_challenge` | without `authenticateClient` | `BASE64URL(SHA256(code_verifier))` |
 | `code_challenge_method` | with `code_challenge` | Must be `S256`. `plain` is not supported |
+| `prompt` | no | `login` or `none`, see [](#single-sign-on) |
 
 A missing `client_id` or `redirect_uri` and an `Error` from `onAuthorize` are answered with `400`. All other errors
 are sent to the redirect URI as `redirect_uri?error=...&error_description=...&state=...`, for example
-`unsupported_response_type` or `invalid_request` for a missing or invalid PKCE challenge.
+`unsupported_response_type`, `invalid_request` for a missing or invalid PKCE challenge, or `login_required` for
+`prompt=none` without a logged-in user.
 
 ### POST /oauth/token (authorization code) {id="token-authorization-code"}
 

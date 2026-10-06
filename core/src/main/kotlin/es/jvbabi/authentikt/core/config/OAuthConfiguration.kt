@@ -6,6 +6,7 @@ class OAuthConfiguration(
     val onAuthorize: OAuthConfigurationBuilder.ValidateAuthorizationCallback?,
     val onDeviceFlowAuthorize: OAuthConfigurationBuilder.ValidateDeviceFlowAuthorizationCallback?,
     val authenticateClient: OAuthConfigurationBuilder.AuthenticateClientCallback?,
+    val loggedInUser: OAuthConfigurationBuilder.LoggedInUserCallback<*>?,
     val deviceCodeLifetime: Duration,
     val authorizationCodeLifetime: Duration,
 )

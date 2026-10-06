@@ -23,6 +23,7 @@ import io.ktor.http.Parameters
 import io.ktor.http.ParametersBuilder
 import io.ktor.http.Url
 import io.ktor.http.encodeURLParameter
+import io.ktor.http.formUrlEncode
 import io.ktor.http.parameters
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
@@ -407,5 +408,87 @@ class OAuthAuthorizationCodeTest {
         assertContains(body, "\"to\":\"https://app.example/cb?")
         assertContains(body, "\"cookies\":[\"SessionToken\"]")
         assertEquals(1, onSuccessCalls)
+    }
+
+    private fun ParametersBuilder.defaultAuthorizeParameters(prompt: String? = null) {
+        append("response_type", "code")
+        append("client_id", "web")
+        append("redirect_uri", "https://app.example/cb")
+        append("state", "xyz")
+        append("scope", "read write admin")
+        append("code_challenge", codeChallenge)
+        append("code_challenge_method", "S256")
+        if (prompt != null) append("prompt", prompt)
+    }
+
+    private fun OAuthConfigurationBuilder<String>.loggedInFromCookie() = loggedInUser { call, application ->
+        assertEquals("web", application.clientId)
+        call.request.cookies["SessionToken"]?.let { testUser(it) }
+    }
+
+    @Test
+    fun `logged-in users get a code without the login UI`() = testApplication {
+        val client = setup(configureOAuth = { loggedInFromCookie() })
+
+        val response = client.authorize { defaultAuthorizeParameters() }
+        // Without the cookie the login UI is shown
+        assertTrue(response.headers[HttpHeaders.Location]!!.startsWith("http://localhost/login"))
+
+        val sso = client.get("/oauth/authorize?" + ParametersBuilder().apply { defaultAuthorizeParameters() }.build().formUrlEncode()) {
+            header(HttpHeaders.Cookie, "SessionToken=alice")
+        }
+        assertEquals(HttpStatusCode.Found, sso.status)
+        val redirect = Url(sso.headers[HttpHeaders.Location]!!)
+        assertEquals("app.example", redirect.host)
+        assertEquals("xyz", redirect.parameters["state"])
+        val code = assertNotNull(redirect.parameters["code"])
+        assertEquals(0, onSuccessCalls)
+
+        val token = client.token(tokenParameters(code))
+        assertEquals(HttpStatusCode.OK, token.status)
+        assertContains(token.bodyAsText(), "token-for-alice@web")
+        // Only the session of the first request (login UI) is left
+        assertEquals(1, sessions.size)
+    }
+
+    @Test
+    fun `prompt=login always shows the login UI`() = testApplication {
+        var calls = 0
+        val client = setup(configureOAuth = {
+            loggedInUser { _, _ -> calls++; testUser("alice") }
+        })
+
+        val response = client.authorize { defaultAuthorizeParameters(prompt = "login") }
+        assertTrue(response.headers[HttpHeaders.Location]!!.startsWith("http://localhost/login"))
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun `prompt=none never shows the login UI`() = testApplication {
+        val client = setup(configureOAuth = { loggedInUser { _, _ -> null } })
+
+        val response = client.authorize { defaultAuthorizeParameters(prompt = "none") }
+        val redirect = Url(response.headers[HttpHeaders.Location]!!)
+        assertEquals("app.example", redirect.host)
+        assertEquals("login_required", redirect.parameters["error"])
+        assertEquals("xyz", redirect.parameters["state"])
+        assertTrue(sessions.isEmpty())
+
+        val combined = client.authorize { defaultAuthorizeParameters(prompt = "none login") }
+        assertEquals("invalid_request", Url(combined.headers[HttpHeaders.Location]!!).parameters["error"])
+    }
+
+    @Test
+    fun `prompt=none without loggedInUser requires a login`() = testApplication {
+        val client = setup()
+        val response = client.authorize { defaultAuthorizeParameters(prompt = "none") }
+        assertEquals("login_required", Url(response.headers[HttpHeaders.Location]!!).parameters["error"])
+    }
+
+    @Test
+    fun `prompt=none with a logged-in user issues a code`() = testApplication {
+        val client = setup(configureOAuth = { loggedInUser { _, _ -> testUser("alice") } })
+        val redirect = Url(client.authorize { defaultAuthorizeParameters(prompt = "none") }.headers[HttpHeaders.Location]!!)
+        assertNotNull(redirect.parameters["code"])
     }
 }

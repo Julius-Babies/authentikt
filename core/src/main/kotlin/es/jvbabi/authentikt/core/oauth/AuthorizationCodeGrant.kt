@@ -4,6 +4,7 @@ import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.config.OAuthAccessToken
 import es.jvbabi.authentikt.core.config.OAuthAuthorizationResult
 import es.jvbabi.authentikt.core.config.OAuthConfiguration
+import es.jvbabi.authentikt.core.config.OAuthConfigurationBuilder
 import es.jvbabi.authentikt.core.config.ValidateAuthorizationCallbackScope
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination
@@ -186,6 +187,15 @@ internal suspend fun <USER> ApplicationCall.handleAuthorizeRequest(authentiktIns
         if (!pkceValuePattern.matches(codeChallenge)) return redirectWithError("invalid_request", "Malformed code_challenge.")
     }
 
+    // OpenID Connect Core 1.0, section 3.1.2.1. Other values (consent, select_account) are accepted and ignored.
+    val prompt = parameters["prompt"].orEmpty().split(' ').filter { it.isNotEmpty() }.toSet()
+    if ("none" in prompt && prompt.size > 1) return redirectWithError("invalid_request", "prompt=none cannot be combined with other values.")
+
+    @Suppress("UNCHECKED_CAST")
+    val loggedInUser = if ("login" in prompt) null
+    else (oAuthConfiguration.loggedInUser as OAuthConfigurationBuilder.LoggedInUserCallback<USER>?)?.invoke(this, application)
+    if (loggedInUser == null && "none" in prompt) return redirectWithError("login_required", "The user is not logged in.")
+
     val session = authentiktInstance.createNewSession(
         destination = SessionDestination.OAuth(
             redirectUri = application.redirectUri,
@@ -199,6 +209,14 @@ internal suspend fun <USER> ApplicationCall.handleAuthorizeRequest(authentiktIns
         state = state,
         codeChallenge = codeChallenge,
     )
+
+    if (loggedInUser != null) {
+        // Single sign-on: the session is completed without a login flow and only carries the code
+        session.identifiedUser = loggedInUser
+        val redirectTo = issueAuthorizationCode(session, oAuthConfiguration)
+        session.invalidate()
+        return respondRedirect(redirectTo, permanent = false)
+    }
 
     val webUiRedirectUrl = URLBuilder(authentiktInstance.configuration.uiLoginBaseUrl).apply {
         parameters.append("_authentikt_flow_active", "true")
