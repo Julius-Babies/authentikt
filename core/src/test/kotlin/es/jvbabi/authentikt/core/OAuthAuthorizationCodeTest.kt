@@ -9,12 +9,14 @@ import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination
 import es.jvbabi.authentikt.core.session.sessions
 import es.jvbabi.authentikt.core.step.plugins.builtin.DonePlugin
+import es.jvbabi.authentikt.core.step.plugins.builtin.DonePluginScope
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Cookie
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
@@ -57,9 +59,13 @@ class OAuthAuthorizationCodeTest {
         .encodeToString(MessageDigest.getInstance("SHA-256").digest(codeVerifier.toByteArray()))
 
     private var onSuccessCalls = 0
+    private var onSuccessBlock: DonePluginScope.() -> Unit = {}
 
     private val donePlugin = DonePlugin<String> {
-        onSuccess { _, _ -> onSuccessCalls++ }
+        onSuccess { _, _ ->
+            onSuccessCalls++
+            onSuccessBlock()
+        }
         onOAuthSuccess { session, user ->
             val client = session.destination!!.applicationId
             OAuthAccessToken("token-for-$user@$client", null, 1.days)
@@ -71,6 +77,7 @@ class OAuthAuthorizationCodeTest {
         sessions.clear()
         authorizationCodes.clear()
         onSuccessCalls = 0
+        onSuccessBlock = {}
     }
 
     private fun ApplicationTestBuilder.setup(
@@ -160,7 +167,7 @@ class OAuthAuthorizationCodeTest {
         assertEquals("/cb", redirect.encodedPath)
         assertEquals("xyz", redirect.parameters["state"])
         val code = assertNotNull(redirect.parameters["code"])
-        assertEquals(0, onSuccessCalls)
+        assertEquals(1, onSuccessCalls)
         assertTrue(sessions.isEmpty())
 
         val response = client.token(tokenParameters(code))
@@ -380,5 +387,25 @@ class OAuthAuthorizationCodeTest {
         assertContains(done.bodyAsText(), "\"type\":\"success\"")
         assertEquals(1, onSuccessCalls)
         assertTrue(authorizationCodes.isEmpty())
+    }
+
+    @Test
+    fun `onSuccess cookies are set for OAuth sessions and its redirect is ignored`() = testApplication {
+        onSuccessBlock = {
+            cookie(Cookie("SessionToken", "sso"))
+            redirect("https://elsewhere.example")
+        }
+        val client = setup()
+        val sessionId = Url(client.authorize().headers[HttpHeaders.Location]!!).parameters["_authentikt_session_id"]!!
+        @Suppress("UNCHECKED_CAST")
+        (sessions[sessionId] as Session<String>).identifiedUser = testUser("alice")
+        client.get("/authentikt/flow/$sessionId/check")
+
+        val done = client.get("/authentikt/flow/$sessionId/steps/plugins/${donePlugin.namespace}")
+        assertContains(done.headers.getAll(HttpHeaders.SetCookie).orEmpty().joinToString(), "SessionToken=sso")
+        val body = done.bodyAsText()
+        assertContains(body, "\"to\":\"https://app.example/cb?")
+        assertContains(body, "\"cookies\":[\"SessionToken\"]")
+        assertEquals(1, onSuccessCalls)
     }
 }

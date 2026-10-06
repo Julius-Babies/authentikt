@@ -127,7 +127,10 @@ fun Application.module() {
                 )
             )
 
-            redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
+            // OAuth sessions are redirected to the client's redirect_uri; the cookie above still logs the user in here
+            if (session.destination == null) {
+                redirect("vpp2://google.com/search?q=welcome+${user.displayName.replace(" ", "+")}")
+            }
         }
 
         onOAuthSuccess { session, user ->

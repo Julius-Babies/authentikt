@@ -117,8 +117,9 @@ sequenceDiagram
    destination is `SessionDestination.OAuth` and redirects the browser to `uiLoginBaseUrl`.
 2. The user logs in. Your step-order callback runs as usual, and you can branch on
    `session.destination is SessionDestination.OAuth`.
-3. When the user reaches the `DonePlugin`, `onSuccess` is **not** called. A single-use authorization code is issued,
-   the session ends, and the `DonePlugin` responds with a `redirect` to `redirect_uri?code=...&state=...`. The
+3. When the user reaches the `DonePlugin`, `onSuccess` runs and its cookies are set, so the user is also logged in to
+   your app. A `redirect(...)` from `onSuccess` is ignored. A single-use authorization code is issued, the session
+   ends, and the `DonePlugin` responds with a `redirect` to `redirect_uri?code=...&state=...`. The
    [`DoneRenderer`](frontend-renderers.md#done) follows it.
 4. The client exchanges the code at `POST /oauth/token`. authentikt runs `onOAuthSuccess` and returns the token.
 

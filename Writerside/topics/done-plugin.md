@@ -61,9 +61,10 @@ When the client calls the step:
    The response is `device_flow_success`, and the browser can tell the user to return to their device. The device
    gets its token from `/oauth/token`.
 2. **OAuth sessions** (`session.destination is SessionDestination.OAuth`, started by `/oauth/authorize`): `onSuccess`
-   is not called. A single-use authorization code is issued, and the response is a `redirect` to
+   runs and its cookies are attached, so the user is also logged in to your app. A `redirect(...)` from `onSuccess` is
+   ignored (and logged as a warning): a single-use authorization code is issued, and the response is a `redirect` to
    `redirect_uri?code=...&state=...`. The client exchanges the code at `/oauth/token`, which runs `onOAuthSuccess`.
-   Repeated calls return the same redirect.
+   Repeated calls return the same redirect without running `onSuccess` again.
 3. **First call of a regular session**: `onSuccess` runs, cookies are attached, and the step is marked completed.
 4. **Later calls**: return `{ "type": "success" }` without running `onSuccess` again.
 
