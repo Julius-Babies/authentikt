@@ -13,6 +13,7 @@ import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.contentOrNull
 import java.security.interfaces.ECPublicKey
 import java.security.interfaces.RSAPublicKey
 import java.time.ZoneId
+import java.util.Base64
 import java.time.ZoneOffset
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -45,22 +47,29 @@ internal class OIDCIdTokenVerifier(
     private var keys: List<Jwk> = emptyList()
     private var lastFetch: Instant? = null
 
-    /**
-     * @return a description of the problem, or `null` if the ID token is valid.
-     */
-    suspend fun verify(idToken: String, expectedNonce: String, clock: Clock): String? {
+    sealed interface Result {
+        /** The ID token is valid. [claims] is its decoded payload. */
+        data class Valid(val claims: JsonObject) : Result
+
+        /** The ID token is invalid. [error] describes the problem. */
+        data class Invalid(val error: String) : Result
+    }
+
+    suspend fun verify(idToken: String, expectedNonce: String, clock: Clock): Result {
         val decoded = try {
             JWT.decode(idToken)
         } catch (_: JWTVerificationException) {
-            return "Malformed ID token"
+            return Result.Invalid("Malformed ID token")
         }
 
         val algorithms = try {
             algorithmsFor(decoded, clock)
         } catch (e: Exception) {
-            return "Failed to load the signing keys: ${e.message}"
+            return Result.Invalid("Failed to load the signing keys: ${e.message}")
         }
-        if (algorithms.isEmpty()) return "No signing key found for algorithm '${decoded.algorithm}' and key ID '${decoded.keyId}'"
+        if (algorithms.isEmpty()) {
+            return Result.Invalid("No signing key found for algorithm '${decoded.algorithm}' and key ID '${decoded.keyId}'")
+        }
 
         var error = "Invalid signature"
         for (algorithm in algorithms) {
@@ -77,12 +86,18 @@ internal class OIDCIdTokenVerifier(
             }
 
             val nonce = decoded.getClaim("nonce").asString()
-            if (nonce == null || !constantTimeEquals(nonce, expectedNonce)) return "Nonce does not match"
+            if (nonce == null || !constantTimeEquals(nonce, expectedNonce)) return Result.Invalid("Nonce does not match")
             val azp = decoded.getClaim("azp").asString()
-            if (azp != null && azp != clientId) return "Authorized party is not the client ID"
-            return null
+            if (azp != null && azp != clientId) return Result.Invalid("Authorized party is not the client ID")
+
+            val claims = try {
+                Json.parseToJsonElement(Base64.getUrlDecoder().decode(decoded.payload).decodeToString()) as JsonObject
+            } catch (_: Exception) {
+                return Result.Invalid("Malformed ID token payload")
+            }
+            return Result.Valid(claims)
         }
-        return error
+        return Result.Invalid(error)
     }
 
     /**

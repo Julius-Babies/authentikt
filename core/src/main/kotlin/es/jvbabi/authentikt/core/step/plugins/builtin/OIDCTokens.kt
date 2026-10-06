@@ -71,7 +71,10 @@ data class OIDCTokens(
  * Receiver of the [OIDCPluginConfigurationBuilder.onUserInfo] callback.
  *
  * @property tokens The full token response of the provider, including the refresh token and ID token.
+ * @property claims The claims of the verified ID token, e.g. `sub`, `email` or `preferred_username`. `null` if the
+ * `openid` scope is not requested. Never `null` if no [OIDCPluginConfigurationBuilder.userInfoEndpoint] is set.
  */
 class OIDCUserInfoScope internal constructor(
     val tokens: OIDCTokens,
+    val claims: JsonObject?,
 )
