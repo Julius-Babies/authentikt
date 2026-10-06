@@ -17,6 +17,8 @@ collects common setup problems.
   limits are per user, so they can be used to lock a user out for the length of the period. See
   [](rate-limiting.md).
 - **User enumeration.** The email step tells the client whether an account exists.
+- **OIDC login attempts are not bound to a browser cookie.** Like the rest of the flow, they rely on the secrecy of
+  the session ID. See [](oidc-plugin.md#security).
 
 ### Protocol
 

@@ -6,6 +6,8 @@ logback = "1.5.32"
 gson = "2.13.1"
 totp = "2.4.1"
 dokka = "2.2.0"
+java-jwt = "4.5.0"
+jwks-rsa = "0.23.0"
 
 [libraries]
 kotlin-onetimepassword = { module = "dev.turingcomplete:kotlin-onetimepassword", version.ref="totp" }
@@ -25,6 +27,8 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+java-jwt = { module = "com.auth0:java-jwt", version.ref = "java-jwt" }
+jwks-rsa = { module = "com.auth0:jwks-rsa", version.ref = "jwks-rsa" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

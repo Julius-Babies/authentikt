@@ -104,6 +104,8 @@ fun Application.module() {
         authorizationEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/auth"
         tokenEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/token"
         userInfoEndpoint = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/userinfo"
+        issuer = "https://keycloak.werkbank.studio/realms/authentikt-lib"
+        jwksUri = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/certs"
 
         onUserInfo { response, accessToken ->
             val fields = response.body<Map<String, String>>()
