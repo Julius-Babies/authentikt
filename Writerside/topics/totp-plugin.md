@@ -32,8 +32,9 @@ val totpPlugin = TotpPlugin<User> {
 ```
 
 `getSecret { user: USER -> String }`
-: Returns the shared secret. The plugin computes the code for the current time window and compares it with the
-submitted code.
+: Returns the shared secret, Base32-encoded by default (the format authenticator apps receive in the
+`otpauth://` URI). The plugin computes the codes for the current time window and its neighbours (see
+`allowedDrift`) and compares them with the submitted code in constant time.
 
 </tab>
 </tabs>
@@ -59,7 +60,38 @@ These options only apply when `getSecret` is used:
 | `digits` | `6` | Number of digits in a code |
 | `totpDuration` | `30.seconds` | Length of a time window |
 | `hmacAlgorithm` | `SHA1` | `SHA1`, `SHA256` or `SHA512` (`TotpPluginConfiguration.TotpHmacAlgorithm`) |
+| `secretEncoding` | `Base32` | `Base32` or `Raw` (`TotpPluginConfiguration.TotpSecretEncoding`). `Raw` uses the UTF-8 bytes of the string as the key |
+| `allowedDrift` | `1` | Number of windows before and after the current one whose codes are also accepted, to tolerate clock drift. `0` accepts only the current window |
 | `clock` | `Clock.System` | Time source (`kotlin.time.Clock`). Useful for tests |
+
+<note>
+Before Base32 became the default, the secret was used as raw UTF-8 bytes. If your stored secrets were generated
+for that behaviour, set <code>secretEncoding = TotpPluginConfiguration.TotpSecretEncoding.Raw</code>.
+</note>
+
+### Replay protection
+
+Without further configuration, a correct code can be used again as long as it is within the accepted windows.
+To prevent this, store the time step of the last accepted code per user. The library has no storage, so you
+provide it through two callbacks:
+
+```kotlin
+val totpPlugin = TotpPlugin<User> {
+    getSecret { user -> user.totpSecret!! }
+    preventReplay(
+        getLastUsedTimeStep = { user -> userRepository.lastTotpTimeStep(user.id) },
+        saveUsedTimeStep = { user, timeStep -> userRepository.saveLastTotpTimeStep(user.id, timeStep) },
+    )
+}
+```
+
+`preventReplay(getLastUsedTimeStep: (USER) -> Long?, saveUsedTimeStep: (USER, Long) -> Unit)`
+: A time step is the number of `totpDuration` windows since the Unix epoch. A code is only accepted if its time
+step is newer than the stored one; `saveUsedTimeStep` is called before the step is completed.
+
+Reading, checking and saving run under a lock within one plugin instance. Across several server instances, two
+simultaneous submissions of the same code can both be accepted. As a consequence of the protection, a user can
+complete the TOTP step at most once per time window. `preventReplay` has no effect with `validate`.
 
 ## Behaviour
 
@@ -106,7 +138,7 @@ val totpPlugin = TotpPlugin<User> {
 **Request:** `POST /flow/{sessionId}/steps/plugins/authentikt-builtin/totp`
 
 ```json
-{ "totp_code": "286133" }
+{ "totp_code": "476885" }
 ```
 
 **Responses**
