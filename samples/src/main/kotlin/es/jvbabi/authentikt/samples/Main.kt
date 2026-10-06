@@ -143,7 +143,8 @@ fun Application.module() {
         override fun now(): Instant = Instant.fromEpochSeconds(1776442771)
     }
 
-    // correct otp = 286133
+    // otpSecret is Base32-encoded, as used by authenticator apps. Correct otp = 476885
+    // Replay protection (preventReplay) is not used here: with the fixed clock, the demo code could only be used once.
     val totpPlugin = TotpPlugin<User> {
         clock = totpClock
         getSecret { user -> user.otpSecret!! }
