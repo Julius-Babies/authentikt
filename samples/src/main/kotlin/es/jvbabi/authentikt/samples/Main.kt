@@ -111,8 +111,13 @@ fun Application.module() {
             val fields = response.body<Map<String, String>>()
             val email = fields["email"]
             val user = users.find { it.email == email }
-            if (user != null) return@onUserInfo UserInfo.Result.Success(user.toAuthentiktUser())
-            return@onUserInfo UserInfo.Result.Failure("User with email $email not found")
+                ?: return@onUserInfo UserInfo.Result.Failure("User with email $email not found")
+
+            // The full token response is available as `tokens`. A real application would store the refresh
+            // token to call the provider on behalf of the user later on.
+            println("OIDC login for ${user.email}: $tokens, access token expires at ${tokens.expiresAt}")
+
+            UserInfo.Result.Success(user.toAuthentiktUser())
         }
 
         scopes("openid", "profile", "email")

@@ -22,8 +22,11 @@ val oidcPlugin = OIDCPlugin<User> {
     onUserInfo { response, accessToken ->
         val email = response.body<JsonObject>()["email"]?.jsonPrimitive?.content
         val user = email?.let { userRepository.findByEmail(it) }
-        if (user != null) UserInfo.Result.Success(user.toAuthentiktUser())
-        else UserInfo.Result.Failure("No account for $email")
+        if (user == null) return@onUserInfo UserInfo.Result.Failure("No account for $email")
+
+        // The full token response, e.g. to store the refresh token
+        tokens.refreshToken?.let { tokenStore.save(user.id, it, tokens.expiresAt) }
+        UserInfo.Result.Success(user.toAuthentiktUser())
     }
 }
 ```
@@ -36,10 +39,11 @@ val oidcPlugin = OIDCPlugin<User> {
 | `tokenEndpoint` | yes | The provider's token endpoint |
 | `userInfoEndpoint` | yes | The provider's user info endpoint |
 | `scopes(vararg)` | yes | At least one scope, usually `openid` plus whatever claims you need |
+| `authorizationParameter(name, value)` | no | Adds an extra query parameter to the authorization URL, for example `access_type=offline` |
 | `applicationName` | no (default `"default"`) | Path segment of the callback URL. Use a distinct name per provider if you install several |
 | `jwksUri` | with `openid` scope | The provider's JSON Web Key Set (`jwks_uri` from the discovery document). Used to verify the signature of the ID token |
 | `issuer` | no (recommended) | Expected `iss` claim of the ID token (the `issuer` from the discovery document). If unset, the issuer is not checked |
-| `onUserInfo { response, accessToken -> UserInfo.Result<USER> }` | yes | Maps the provider's user info to your user |
+| `onUserInfo { response, accessToken -> UserInfo.Result<USER> }` | yes | Maps the provider's user info to your user. The full token response is available as `tokens` |
 
 The endpoints can be found in your provider's discovery document at `/.well-known/openid-configuration`.
 
@@ -49,13 +53,54 @@ The endpoints can be found in your provider's discovery document at `/.well-know
 ### Mapping user info
 
 `onUserInfo` receives the raw Ktor `HttpResponse` of the user info request (JSON content negotiation is installed,
-so `response.body<T>()` works) and the provider's access token. Return:
+so `response.body<T>()` works) and the provider's access token. The lambda runs with an `OIDCUserInfoScope` receiver,
+so the complete token response is available as [`tokens`](#token-details). Return:
 
 - `UserInfo.Result.Success(authentiktUser)` to log the user in, or
 - `UserInfo.Result.Failure("reason")` to abort. The reason is logged and returned to the browser with status `401`.
 
 This is the place to create accounts on first login (just-in-time provisioning) or to reject users who are not
 allowed in.
+
+### Token details {id="token-details"}
+
+`tokens` is an `OIDCTokens` instance that holds everything the token endpoint returned:
+
+| Property | Token response field | Description |
+|----------|----------------------|-------------|
+| `accessToken` | `access_token` | The access token. Same value as the `accessToken` parameter |
+| `tokenType` | `token_type` | Usually `Bearer`, `null` if missing |
+| `refreshToken` | `refresh_token` | The refresh token, `null` if the provider did not issue one |
+| `idToken` | `id_token` | The encoded ID token JWT, `null` if none was issued |
+| `expiresIn` | `expires_in` | Lifetime of the access token as a `Duration`, `null` if missing |
+| `expiresAt` | - | `receivedAt + expiresIn`, `null` if `expiresIn` is unknown |
+| `scopes` | `scope` | The granted scopes, `null` if the provider did not send them (they then equal the requested scopes) |
+| `receivedAt` | - | When the response was received, taken from the configured `clock` |
+| `raw` | - | The complete response as `JsonObject`, for provider-specific fields such as Keycloak's `refresh_expires_in` |
+
+authentikt does not store, refresh or revoke these tokens; persist what you need inside `onUserInfo`. With the
+`openid` scope, the ID token has already been verified when `onUserInfo` runs (see [Security](#security)); the user is
+still identified through the user info endpoint. `toString()` omits
+the token values so they do not end up in logs by accident.
+
+> Refresh tokens are long-lived credentials. Store them encrypted and treat them like passwords.
+{style="warning"}
+
+### Getting a refresh token
+
+Whether a refresh token is issued depends on the provider:
+
+- **Keycloak** and **Authentik** issue one for the authorization code flow by default. Request `offline_access` to
+  get an offline token that survives the SSO session.
+- **Microsoft Entra ID** and most other providers that follow the OpenID Connect spec require the `offline_access`
+  scope: `scopes("openid", "profile", "email", "offline_access")`.
+- **Google** ignores `offline_access` and requires extra authorization parameters instead:
+
+```kotlin
+scopes("openid", "profile", "email")
+authorizationParameter("access_type", "offline")
+authorizationParameter("prompt", "consent") // otherwise Google only returns a refresh token on the first consent
+```
 
 ## Registering the redirect URI
 
@@ -90,12 +135,12 @@ sequenceDiagram
     P->>B: login page
     B->>K: GET .../oidc/{app}/callback?code=...&state=...
     K->>P: POST token endpoint (code, code_verifier, client credentials)
-    P-->>K: access_token, id_token
+    P-->>K: access_token, refresh_token, id_token, expires_in, ...
     K->>P: GET jwks_uri (only if the signing key is unknown)
     K->>K: verify ID token signature and claims (nonce, aud, exp, iss)
     K->>P: GET user info endpoint (Bearer)
     P-->>K: claims
-    K->>K: onUserInfo, set identifiedUser, nextStep()
+    K->>K: onUserInfo (with tokens), set identifiedUser, nextStep()
     K-->>B: 302 to uiLoginBaseUrl?_authentikt_flow_active=true&_authentikt_session_id=...
     B->>K: GET .../check (flow resumes with the next step)
 ```
