@@ -108,7 +108,9 @@ fun Application.module() {
         jwksUri = "https://keycloak.werkbank.studio/realms/authentikt-lib/protocol/openid-connect/certs"
 
         onUserInfo { response, accessToken ->
-            val fields = response.body<Map<String, String>>()
+            // `response` is set because userInfoEndpoint is configured. Without it, the verified ID token claims
+            // are available as `claims`.
+            val fields = response!!.body<Map<String, String>>()
             val email = fields["email"]
             val user = users.find { it.email == email }
                 ?: return@onUserInfo UserInfo.Result.Failure("User with email $email not found")

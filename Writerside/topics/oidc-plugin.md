@@ -20,7 +20,8 @@ val oidcPlugin = OIDCPlugin<User> {
     scopes("openid", "profile", "email")
 
     onUserInfo { response, accessToken ->
-        val email = response.body<JsonObject>()["email"]?.jsonPrimitive?.content
+        // `response` is the user info response, it is only null if no userInfoEndpoint is set
+        val email = response!!.body<JsonObject>()["email"]?.jsonPrimitive?.content
         val user = email?.let { userRepository.findByEmail(it) }
         if (user == null) return@onUserInfo UserInfo.Result.Failure("No account for $email")
 
@@ -37,7 +38,7 @@ val oidcPlugin = OIDCPlugin<User> {
 | `clientSecret` | yes | Client secret. It is sent in the token request body |
 | `authorizationEndpoint` | yes | The provider's authorization endpoint |
 | `tokenEndpoint` | yes | The provider's token endpoint |
-| `userInfoEndpoint` | yes | The provider's user info endpoint |
+| `userInfoEndpoint` | no (requires `openid` if unset) | The provider's user info endpoint. If unset, no user info request is made and the user is resolved from the ID token, see [Without a user info endpoint](#without-user-info) |
 | `scopes(vararg)` | yes | At least one scope, usually `openid` plus whatever claims you need |
 | `authorizationParameter(name, value)` | no | Adds an extra query parameter to the authorization URL, for example `access_type=offline` |
 | `applicationName` | no (default `"default"`) | Path segment of the callback URL. Use a distinct name per provider if you install several |
@@ -53,14 +54,54 @@ The endpoints can be found in your provider's discovery document at `/.well-know
 ### Mapping user info
 
 `onUserInfo` receives the raw Ktor `HttpResponse` of the user info request (JSON content negotiation is installed,
-so `response.body<T>()` works) and the provider's access token. The lambda runs with an `OIDCUserInfoScope` receiver,
-so the complete token response is available as [`tokens`](#token-details). Return:
+so `response.body<T>()` works) and the provider's access token. `response` is `null` if no `userInfoEndpoint` is
+set. The lambda runs with an `OIDCUserInfoScope` receiver, which provides:
+
+- [`tokens`](#token-details), the complete token response.
+- `claims`, the claims of the verified ID token as `JsonObject` (for example `sub`, `email`,
+  `preferred_username`). `null` if the `openid` scope is not requested.
+
+Return:
 
 - `UserInfo.Result.Success(authentiktUser)` to log the user in, or
 - `UserInfo.Result.Failure("reason")` to abort. The reason is logged and returned to the browser with status `401`.
 
 This is the place to create accounts on first login (just-in-time provisioning) or to reject users who are not
 allowed in.
+
+### Without a user info endpoint {id="without-user-info"}
+
+An access token is not always valid for the user info endpoint. Microsoft Entra ID, for example, issues access
+tokens for a single resource: if you request scopes for a resource other than Microsoft Graph (such as
+`https://outlook.office.com/IMAP.AccessAsUser.All` for IMAP via XOAUTH2), `https://graph.microsoft.com/oidc/userinfo`
+rejects the token with `401`.
+
+In that case, leave `userInfoEndpoint` unset and resolve the user from the verified ID token claims:
+
+```kotlin
+val oidcPlugin = OIDCPlugin<User> {
+    clientId = "..."
+    clientSecret = System.getenv("OIDC_CLIENT_SECRET")
+    authorizationEndpoint = "https://login.microsoftonline.com/$tenant/oauth2/v2.0/authorize"
+    tokenEndpoint = "https://login.microsoftonline.com/$tenant/oauth2/v2.0/token"
+    issuer = "https://login.microsoftonline.com/$tenant/v2.0"
+    jwksUri = "https://login.microsoftonline.com/$tenant/discovery/v2.0/keys"
+    scopes("openid", "email", "offline_access", "https://outlook.office.com/IMAP.AccessAsUser.All")
+
+    onUserInfo { _, _ ->
+        // `response` is null, use the claims of the verified ID token instead
+        val email = claims!!["email"]?.jsonPrimitive?.content
+        val user = email?.let { userRepository.findByEmail(it) }
+            ?: return@onUserInfo UserInfo.Result.Failure("No account for $email")
+        UserInfo.Result.Success(user.toAuthentiktUser())
+    }
+}
+```
+
+Without a `userInfoEndpoint`, the `openid` scope and `jwksUri` are required, because the ID token is then the only
+source of the user's identity. `claims` is never `null` in this case. Which claims the ID token contains depends on
+the provider and the requested scopes; `sub` (combined with `iss`) is the only stable identifier guaranteed by the
+spec.
 
 ### Token details {id="token-details"}
 
@@ -79,8 +120,8 @@ allowed in.
 | `raw` | - | The complete response as `JsonObject`, for provider-specific fields such as Keycloak's `refresh_expires_in` |
 
 authentikt does not store, refresh or revoke these tokens; persist what you need inside `onUserInfo`. With the
-`openid` scope, the ID token has already been verified when `onUserInfo` runs (see [Security](#security)); the user is
-still identified through the user info endpoint. `toString()` omits
+`openid` scope, the ID token has already been verified when `onUserInfo` runs (see [Security](#security)) and its
+claims are available as `claims`. `toString()` omits
 the token values so they do not end up in logs by accident.
 
 > Refresh tokens are long-lived credentials. Store them encrypted and treat them like passwords.
@@ -138,9 +179,11 @@ sequenceDiagram
     P-->>K: access_token, refresh_token, id_token, expires_in, ...
     K->>P: GET jwks_uri (only if the signing key is unknown)
     K->>K: verify ID token signature and claims (nonce, aud, exp, iss)
-    K->>P: GET user info endpoint (Bearer)
-    P-->>K: claims
-    K->>K: onUserInfo (with tokens), set identifiedUser, nextStep()
+    opt userInfoEndpoint is set
+        K->>P: GET user info endpoint (Bearer)
+        P-->>K: claims
+    end
+    K->>K: onUserInfo (with tokens and ID token claims), set identifiedUser, nextStep()
     K-->>B: 302 to uiLoginBaseUrl?_authentikt_flow_active=true&_authentikt_session_id=...
     B->>K: GET .../check (flow resumes with the next step)
 ```
@@ -177,7 +220,7 @@ The keys are fetched through the same HTTP client as the other provider requests
 cached. If a token is signed with an unknown key, for example after a key rotation, they are fetched again, at most
 once per minute.
 
-The user info endpoint stays the source of the claims passed to `onUserInfo`.
+Only the claims of a verified ID token are passed to `onUserInfo` as `claims`.
 
 > Your provider must support PKCE with `S256`. All common providers (Keycloak, Authentik, Entra ID, Google, Okta)
 > do.
@@ -214,7 +257,7 @@ route.
 | `code` missing | `400` |
 | Token exchange failed | `500 Failed to exchange code for token` |
 | ID token missing or invalid (only with the `openid` scope) | `401 Invalid ID token` |
-| User info request failed | `500 Failed to fetch user info` |
+| User info request failed (only with `userInfoEndpoint`) | `500 Failed to fetch user info` |
 | `onUserInfo` returned `Failure` | `401` with the failure reason |
 
 ## Frontend

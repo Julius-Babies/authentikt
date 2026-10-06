@@ -38,8 +38,10 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -76,6 +78,7 @@ private class MockOIDCProvider {
     /** Overrides the algorithm the ID token is signed with, e.g. HS256. */
     var signingAlgorithm: Algorithm? = null
     var jwksRequests = 0
+    var userInfoRequests = 0
 
     init {
         server.createContext("/token") { exchange ->
@@ -102,6 +105,7 @@ private class MockOIDCProvider {
             )
         }
         server.createContext("/userinfo") { exchange ->
+            userInfoRequests++
             val authorized = exchange.requestHeaders.getFirst("Authorization") == "Bearer access-token"
             if (authorized) exchange.respond(200, """{"email":"alice@example.com"}""")
             else exchange.respond(401, "{}")
@@ -114,6 +118,7 @@ private class MockOIDCProvider {
         .withIssuer(baseUrl)
         .withAudience("client")
         .withSubject("alice")
+        .withClaim("email", "alice@example.com")
         .withClaim("nonce", nonce)
         .withExpiresAt(Date(System.currentTimeMillis() + 300_000))
         .sign(signingAlgorithm ?: Algorithm.RSA256(signingKeyPair.public as RSAPublicKey, signingKeyPair.private as RSAPrivateKey))
@@ -164,24 +169,31 @@ class OIDCPluginTest {
 
     private val callbackPath = "/authentikt/static/plugins/authentikt-builtin/oidc/default/callback"
 
+    /** Whether the plugin is configured with a user info endpoint. Without one, the user is resolved from the ID token. */
+    private var useUserInfoEndpoint = true
+
     private fun oidcPlugin() = OIDCPlugin<String> {
         clientId = "client"
         clientSecret = "secret"
         authorizationEndpoint = "${provider.baseUrl}/authorize"
         tokenEndpoint = "${provider.baseUrl}/token"
-        userInfoEndpoint = "${provider.baseUrl}/userinfo"
+        if (useUserInfoEndpoint) userInfoEndpoint = "${provider.baseUrl}/userinfo"
         issuer = provider.baseUrl
         jwksUri = "${provider.baseUrl}/jwks"
         scopes("openid", "email")
         onUserInfo { response, _ ->
             receivedTokens = tokens
-            val email = response.body<JsonObject>()["email"]?.jsonPrimitive?.content
+            receivedClaims = claims
+            receivedResponse = response
+            val email = (response?.body<JsonObject>() ?: claims)?.get("email")?.jsonPrimitive?.content
             if (email == "alice@example.com") UserInfo.Result.Success(oidcTestUser("alice"))
             else UserInfo.Result.Failure("unknown user")
         }
     }
 
     private var receivedTokens: OIDCTokens? = null
+    private var receivedClaims: JsonObject? = null
+    private var receivedResponse: HttpResponse? = null
 
     private val donePlugin = DonePlugin<String> { onSuccess { _, _ -> } }
 
@@ -244,6 +256,58 @@ class OIDCPluginTest {
         assertEquals(300.seconds, tokens.expiresIn)
         assertEquals(listOf("openid", "email"), tokens.scopes)
         assertNotNull(tokens.idToken)
+
+        assertEquals(1, provider.userInfoRequests)
+        assertNotNull(receivedResponse)
+        val claims = assertNotNull(receivedClaims)
+        assertEquals("alice", claims["sub"]?.jsonPrimitive?.content)
+        assertEquals(provider.expectedNonce, claims["nonce"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `without a user info endpoint the user is resolved from the ID token`() = testApplication {
+        useUserInfoEndpoint = false
+        val (response, completed) = login()
+        assertEquals(HttpStatusCode.Found, response.status)
+        assertTrue(completed)
+        assertEquals(0, provider.userInfoRequests)
+        assertNull(receivedResponse)
+        assertEquals("alice@example.com", receivedClaims?.get("email")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `without a user info endpoint an invalid ID token is rejected`() = testApplication {
+        useUserInfoEndpoint = false
+        provider.idTokenNonce = "wrong-nonce"
+        val (response, completed) = login()
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertTrue(!completed)
+        assertNull(receivedClaims)
+        assertEquals(0, provider.userInfoRequests)
+    }
+
+    @Test
+    fun `the openid scope is required without a user info endpoint`() {
+        assertFailsWith<IllegalArgumentException> {
+            OIDCPlugin<String> {
+                clientId = "client"
+                clientSecret = "secret"
+                authorizationEndpoint = "${provider.baseUrl}/authorize"
+                tokenEndpoint = "${provider.baseUrl}/token"
+                scopes("email")
+                onUserInfo { _, _ -> UserInfo.Result.Failure("unused") }
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OIDCPlugin<String> {
+                clientId = "client"
+                clientSecret = "secret"
+                authorizationEndpoint = "${provider.baseUrl}/authorize"
+                tokenEndpoint = "${provider.baseUrl}/token"
+                scopes("openid", "email")
+                onUserInfo { _, _ -> UserInfo.Result.Failure("unused") }
+            }
+        }
     }
 
     @Test

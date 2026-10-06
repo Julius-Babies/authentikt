@@ -142,28 +142,33 @@ class OIDCPlugin<USER>(
                         return@get
                     }
 
-                    if (idTokenVerifier != null) {
+                    val claims = if (idTokenVerifier != null) {
                         val idToken = tokens.idToken
-                        val idTokenError = if (idToken == null) "The token response contains no ID token"
+                        val verification = if (idToken == null) OIDCIdTokenVerifier.Result.Invalid("The token response contains no ID token")
                         else idTokenVerifier.verify(idToken, oidcState.nonce, session.clock)
-                        if (idTokenError != null) {
-                            logger.warn("Invalid ID token in session ${session.sessionId}: $idTokenError")
-                            call.respondText("Invalid ID token", status = HttpStatusCode.Unauthorized)
+                        when (verification) {
+                            is OIDCIdTokenVerifier.Result.Valid -> verification.claims
+                            is OIDCIdTokenVerifier.Result.Invalid -> {
+                                logger.warn("Invalid ID token in session ${session.sessionId}: ${verification.error}")
+                                call.respondText("Invalid ID token", status = HttpStatusCode.Unauthorized)
+                                return@get
+                            }
+                        }
+                    } else null
+
+                    val userResponse = configuration.userInfoEndpoint?.let { userInfoEndpoint ->
+                        val response = httpClient.get(userInfoEndpoint) {
+                            bearerAuth(tokens.accessToken)
+                        }
+                        if (!response.status.isSuccess()) {
+                            logger.warn("Failed to fetch user info in session ${session.sessionId}: ${response.status} ${response.bodyAsText()}")
+                            call.respondText("Failed to fetch user info", status = HttpStatusCode.InternalServerError)
                             return@get
                         }
+                        response
                     }
 
-                    val userResponse = httpClient.get(configuration.userInfoEndpoint.toString()) {
-                        bearerAuth(tokens.accessToken)
-                    }
-                    if (!userResponse.status.isSuccess()) {
-                        logger.warn("Failed to fetch user info in session ${session.sessionId}: ${userResponse.status} ${userResponse.bodyAsText()}")
-                        call.respondText("Failed to fetch user info", status = HttpStatusCode.InternalServerError)
-                        return@get
-                    }
-
-
-                    val result = configuration.onUserInfo(OIDCUserInfoScope(tokens), userResponse, tokens.accessToken)
+                    val result = configuration.onUserInfo(OIDCUserInfoScope(tokens, claims), userResponse, tokens.accessToken)
                     when (result) {
                         is UserInfo.Result.Success -> {
                             val activeState = session.authenticationSteps.lastOrNull()?.second as? OIDCPluginState
@@ -325,12 +330,15 @@ class OIDCPluginConfigurationBuilder<USER> {
             _tokenEndpoint = value
         }
 
-    private var _userInfoEndpoint: String? = null
-    var userInfoEndpoint: String
-        get() = _userInfoEndpoint ?: throw IllegalStateException("userInfoEndpoint must be set")
-        set(value) {
-            _userInfoEndpoint = value
-        }
+    /**
+     * The provider's user info endpoint. Its response is passed to [onUserInfo].
+     *
+     * If `null`, no user info request is made and the user must be resolved from the verified ID token claims
+     * ([OIDCUserInfoScope.claims]). This is required for providers whose access token is not valid for the user info
+     * endpoint, e.g. a Microsoft Entra ID access token for a resource other than Microsoft Graph. The `openid` scope
+     * and [jwksUri] are then required.
+     */
+    var userInfoEndpoint: String? = null
 
     private val scopes = mutableListOf<String>()
     fun scopes(vararg scopes: String) {
@@ -375,9 +383,13 @@ class OIDCPluginConfigurationBuilder<USER> {
         require(scopes.isNotEmpty()) { "At least one scope must be set" }
         require(applicationName.isNotEmpty()) { "applicationName must be set" }
         require(_tokenEndpoint.orEmpty().isNotEmpty()) { "tokenEndpoint must be set" }
-        require(_userInfoEndpoint.orEmpty().isNotEmpty()) { "userInfoEndpoint must be set" }
+        val userInfoEndpoint = userInfoEndpoint
+        require(userInfoEndpoint == null || userInfoEndpoint.isNotEmpty()) { "userInfoEndpoint must not be empty" }
         requireNotNull(onUserInfo) { "onUserInfo callback must be set" }
         require("openid" !in scopes || !jwksUri.isNullOrEmpty()) { "jwksUri must be set if the openid scope is requested" }
+        require(userInfoEndpoint != null || "openid" in scopes) {
+            "The openid scope must be requested if no userInfoEndpoint is set, the ID token is then the only source of the user's identity"
+        }
 
         return OIDCPluginConfiguration(
             applicationName = applicationName,
@@ -387,7 +399,7 @@ class OIDCPluginConfigurationBuilder<USER> {
             authorizationParameters = authorizationParameters.toList(),
             authorizationEndpoint = Url(_authorizationEndpoint!!),
             tokenUrl = Url(_tokenEndpoint!!),
-            userInfoEndpoint = Url(_userInfoEndpoint!!),
+            userInfoEndpoint = userInfoEndpoint?.let(::Url),
             issuer = issuer,
             jwksUri = jwksUri?.let(::Url),
             onUserInfo = onUserInfo!!
@@ -403,13 +415,17 @@ internal data class OIDCPluginConfiguration<USER>(
     val authorizationParameters: List<Pair<String, String>>,
     val authorizationEndpoint: Url,
     val tokenUrl: Url,
-    val userInfoEndpoint: Url,
+    val userInfoEndpoint: Url?,
     val issuer: String?,
     val jwksUri: Url?,
     val onUserInfo: OnUserInfo<USER>,
 ) {
+    /**
+     * Maps the provider's response to a user. `response` is the user info response, or `null` if no
+     * [OIDCPluginConfigurationBuilder.userInfoEndpoint] is set.
+     */
     typealias OnUserInfo<USER> =
-        suspend OIDCUserInfoScope.(response: HttpResponse, accessToken: String) -> UserInfo.Result<USER>
+        suspend OIDCUserInfoScope.(response: HttpResponse?, accessToken: String) -> UserInfo.Result<USER>
 }
 
 class UserInfo {
