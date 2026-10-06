@@ -17,8 +17,6 @@ collects common setup problems.
   limits are per user, so they can be used to lock a user out for the length of the period. See
   [](rate-limiting.md).
 - **User enumeration.** The email step tells the client whether an account exists.
-- **TOTP replay protection is opt-in.** Without `preventReplay`, a TOTP code can be reused while it is within the
-  accepted windows. Its lock only covers one server instance. See [](totp-plugin.md#replay-protection).
 
 ### Protocol
 
