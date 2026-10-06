@@ -32,8 +32,8 @@ val totpPlugin = TotpPlugin<User> {
 ```
 
 `getSecret { user: USER -> String }`
-: Returns the shared secret. The plugin computes the code for the current time window and compares it with the
-submitted code.
+: Returns the shared secret. The plugin computes the codes for the current time window and its neighbours (see
+`allowedDrift`) and compares them with the submitted code in constant time.
 
 </tab>
 </tabs>
@@ -59,6 +59,7 @@ These options only apply when `getSecret` is used:
 | `digits` | `6` | Number of digits in a code |
 | `totpDuration` | `30.seconds` | Length of a time window |
 | `hmacAlgorithm` | `SHA1` | `SHA1`, `SHA256` or `SHA512` (`TotpPluginConfiguration.TotpHmacAlgorithm`) |
+| `allowedDrift` | `1` | Number of windows before and after the current one whose codes are also accepted, to tolerate clock drift. `0` accepts only the current window |
 | `clock` | `Clock.System` | Time source (`kotlin.time.Clock`). Useful for tests |
 
 ## Behaviour

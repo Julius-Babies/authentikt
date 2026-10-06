@@ -1,8 +1,8 @@
 package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import dev.turingcomplete.kotlinonetimepassword.HmacAlgorithm
-import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordConfig
-import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordGenerator
+import dev.turingcomplete.kotlinonetimepassword.HmacOneTimePasswordConfig
+import dev.turingcomplete.kotlinonetimepassword.HmacOneTimePasswordGenerator
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.ratelimit.RateLimit
 import es.jvbabi.authentikt.core.ratelimit.RateLimiter
@@ -19,18 +19,18 @@ import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.toJavaInstant
 
 /**
  * Time-based One-Time Password verification step plugin.
  *
- * Validates a TOTP code either by checking against a generated code from a stored secret,
- * or by delegating to a custom validation callback.
+ * Validates a TOTP code either by checking against codes generated from a stored secret,
+ * or by delegating to a custom validation callback. With a secret, codes of up to
+ * [TotpPluginConfigurationBuilder.allowedDrift] windows before and after the current one are accepted.
  *
  * Failed attempts are limited per user, see [TotpPluginConfigurationBuilder.rateLimit].
  *
@@ -144,6 +144,12 @@ class TotpPluginConfigurationBuilder<USER> {
     var hmacAlgorithm: TotpPluginConfiguration.TotpHmacAlgorithm = TotpPluginConfiguration.TotpHmacAlgorithm.SHA1
 
     /**
+     * Number of time windows before and after the current one whose codes are also accepted, to tolerate clock drift
+     * and codes entered at the end of a window. Defaults to 1. Set to 0 to accept only the current window.
+     */
+    var allowedDrift: Int = 1
+
+    /**
      * Failed attempts allowed per user, e.g. `3 triesPer 3.minutes`. Defaults to 5 tries per 5 minutes.
      * Set to `null` to disable the limit.
      */
@@ -164,8 +170,8 @@ class TotpPluginConfigurationBuilder<USER> {
     /**
      * Sets the secret retrieval callback for server-side TOTP generation.
      *
-     * When this is set, the plugin generates the expected code internally and
-     * compares it against the user-submitted code.
+     * When this is set, the plugin generates the expected codes internally and compares them against the
+     * user-submitted code.
      *
      * @param block suspending function that returns the TOTP secret for the given user.
      */
@@ -177,6 +183,9 @@ class TotpPluginConfigurationBuilder<USER> {
         if (this.checkOtp == null && this.getSecret == null) {
             throw RuntimeException("At least one method of TOTP validation is required. Either provide the secret or a validation function.")
         }
+        require(digits in 1..9) { "TOTP digits must be between 1 and 9" }
+        require(allowedDrift >= 0) { "TOTP allowedDrift must not be negative" }
+        require(totpDuration.inWholeMilliseconds > 0) { "TOTP totpDuration must be positive" }
         return TotpPluginConfiguration(
             clock = this.clock,
             checkUser = this.checkOtp,
@@ -185,6 +194,7 @@ class TotpPluginConfigurationBuilder<USER> {
             totpDuration = this.totpDuration,
             getSecret = this.getSecret,
             rateLimit = this.rateLimit,
+            allowedDrift = this.allowedDrift,
         )
     }
 }
@@ -200,27 +210,34 @@ data class TotpPluginConfiguration<USER>(
     val totpDuration: Duration,
     val getSecret: TotpPluginConfigurationBuilder.TotpGetSecret<USER>?,
     val rateLimit: RateLimit?,
+    val allowedDrift: Int = 1,
 ) {
 
-    private val config = TimeBasedOneTimePasswordConfig(
-        timeStep = totpDuration.inWholeSeconds,
-        timeStepUnit = TimeUnit.SECONDS,
-        hmacAlgorithm = this.hmacAlgorithm,
+    private val config = HmacOneTimePasswordConfig(
         codeDigits = digits,
+        hmacAlgorithm = this.hmacAlgorithm,
     )
 
     suspend fun check(user: USER, totp: String): Boolean {
-        if (this.getSecret != null) {
-            val secret = this.getSecret(user)
-            val isValid = TimeBasedOneTimePasswordGenerator(
-                secret = secret.toByteArray(),
-                config = this.config
-            ).generate(clock.now().toJavaInstant()) == totp
+        val getSecret = this.getSecret ?: return this.checkUser!!(user, totp)
 
-            return isValid
+        return matchesCode(getSecret(user).toByteArray(), totp)
+    }
+
+    /**
+     * Returns whether [totp] equals the code of any time window within [allowedDrift].
+     * Every window is compared in constant time.
+     */
+    private fun matchesCode(secret: ByteArray, totp: String): Boolean {
+        if (totp.length != digits || !totp.all { it in '0'..'9' }) return false
+        val current = Math.floorDiv(clock.now().toEpochMilliseconds(), totpDuration.inWholeMilliseconds)
+        val generator = HmacOneTimePasswordGenerator(secret, config)
+        val submitted = totp.toByteArray()
+        var match = false
+        for (timeStep in (current - allowedDrift)..(current + allowedDrift)) {
+            match = MessageDigest.isEqual(generator.generate(timeStep).toByteArray(), submitted) or match
         }
-
-        return this.checkUser!!(user, totp)
+        return match
     }
 
     @Suppress("unused")
