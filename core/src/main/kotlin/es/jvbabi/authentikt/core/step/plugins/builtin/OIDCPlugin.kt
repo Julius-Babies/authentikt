@@ -27,15 +27,9 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.longOrNull
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
-import kotlin.time.Instant
 
 class OIDCPlugin<USER>(
     configuration: OIDCPluginConfigurationBuilder<USER>.() -> Unit,
@@ -58,6 +52,16 @@ class OIDCPlugin<USER>(
                 val httpClient = HttpClient(CIO) {
                     install(ContentNegotiation) { json(json) }
                     customSsl(authentiktInstance.configuration.customSslCerts)
+                }
+
+                val idTokenVerifier = configuration.jwksUri?.takeIf { "openid" in configuration.scopes }?.let { jwksUri ->
+                    OIDCIdTokenVerifier(
+                        httpClient = httpClient,
+                        jwksUri = jwksUri,
+                        clientId = configuration.clientId,
+                        clientSecret = configuration.clientSecret,
+                        issuer = configuration.issuer,
+                    )
                 }
 
                 get("/callback") {
@@ -130,8 +134,10 @@ class OIDCPlugin<USER>(
 
                     val tokenResponseBody = tokenResponse.body<OIDCTokenResponse>()
 
-                    if ("openid" in configuration.scopes) {
-                        val idTokenError = validateIdToken(tokenResponseBody.idToken, oidcState.nonce, session.clock.now())
+                    if (idTokenVerifier != null) {
+                        val idToken = tokenResponseBody.idToken
+                        val idTokenError = if (idToken == null) "The token response contains no ID token"
+                        else idTokenVerifier.verify(idToken, oidcState.nonce, session.clock)
                         if (idTokenError != null) {
                             logger.warn("Invalid ID token in session ${session.sessionId}: $idTokenError")
                             call.respondText("Invalid ID token", status = HttpStatusCode.Unauthorized)
@@ -232,44 +238,6 @@ class OIDCPlugin<USER>(
         session.authenticationSteps[session.authenticationSteps.lastIndex] = plugin to createState(session)
         stepState
     }
-
-    /**
-     * Validates the claims of the ID token returned by the token endpoint.
-     *
-     * The ID token is received directly from the token endpoint over TLS, so its signature is not checked
-     * (OpenID Connect Core 1.0, section 3.1.3.7).
-     *
-     * @return a description of the problem, or `null` if the ID token is valid.
-     */
-    private fun validateIdToken(idToken: String?, expectedNonce: String, now: Instant): String? {
-        if (idToken == null) return "The token response contains no ID token"
-        val parts = idToken.split(".")
-        if (parts.size != 3) return "Malformed ID token"
-        val claims = runCatching {
-            json.parseToJsonElement(Base64.getUrlDecoder().decode(parts[1]).decodeToString()).jsonObject
-        }.getOrElse { return "Malformed ID token" }
-
-        fun claim(name: String) = (claims[name] as? JsonPrimitive)?.contentOrNull
-
-        val nonce = claim("nonce")
-        if (nonce == null || !constantTimeEquals(nonce, expectedNonce)) return "Nonce does not match"
-
-        val audience = when (val aud = claims["aud"]) {
-            is JsonPrimitive -> listOfNotNull(aud.contentOrNull)
-            is JsonArray -> aud.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-            else -> emptyList()
-        }
-        if (configuration.clientId !in audience) return "Audience does not contain the client ID"
-        val azp = claim("azp")
-        if (azp != null && azp != configuration.clientId) return "Authorized party is not the client ID"
-
-        val exp = (claims["exp"] as? JsonPrimitive)?.longOrNull ?: return "ID token has no expiry"
-        if (now.epochSeconds >= exp) return "ID token has expired"
-
-        val issuer = configuration.issuer
-        if (issuer != null && claim("iss") != issuer) return "Issuer does not match"
-        return null
-    }
 }
 
 private val secureRandom = SecureRandom()
@@ -286,7 +254,7 @@ internal fun codeChallengeS256(codeVerifier: String): String {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(hash)
 }
 
-private fun constantTimeEquals(a: String, b: String): Boolean =
+internal fun constantTimeEquals(a: String, b: String): Boolean =
     MessageDigest.isEqual(a.toByteArray(Charsets.UTF_8), b.toByteArray(Charsets.UTF_8))
 
 /**
@@ -364,6 +332,13 @@ class OIDCPluginConfigurationBuilder<USER> {
      */
     var issuer: String? = null
 
+    /**
+     * The JSON Web Key Set of the provider, for example `https://sso.example.com/realms/main/protocol/openid-connect/certs`
+     * (`jwks_uri` in the provider's `/.well-known/openid-configuration`). Used to verify the signature of the ID token.
+     * Required if the `openid` scope is requested.
+     */
+    var jwksUri: String? = null
+
     private var onUserInfo: OIDCPluginConfiguration.OnUserInfo<USER>? = null
     fun onUserInfo(block: OIDCPluginConfiguration.OnUserInfo<USER>) {
         onUserInfo = block
@@ -378,6 +353,7 @@ class OIDCPluginConfigurationBuilder<USER> {
         require(_tokenEndpoint.orEmpty().isNotEmpty()) { "tokenEndpoint must be set" }
         require(_userInfoEndpoint.orEmpty().isNotEmpty()) { "userInfoEndpoint must be set" }
         requireNotNull(onUserInfo) { "onUserInfo callback must be set" }
+        require("openid" !in scopes || !jwksUri.isNullOrEmpty()) { "jwksUri must be set if the openid scope is requested" }
 
         return OIDCPluginConfiguration(
             applicationName = applicationName,
@@ -388,6 +364,7 @@ class OIDCPluginConfigurationBuilder<USER> {
             tokenUrl = Url(_tokenEndpoint!!),
             userInfoEndpoint = Url(_userInfoEndpoint!!),
             issuer = issuer,
+            jwksUri = jwksUri?.let(::Url),
             onUserInfo = onUserInfo!!
         )
     }
@@ -402,6 +379,7 @@ internal data class OIDCPluginConfiguration<USER>(
     val tokenUrl: Url,
     val userInfoEndpoint: Url,
     val issuer: String?,
+    val jwksUri: Url?,
     val onUserInfo: OnUserInfo<USER>,
 ) {
     typealias OnUserInfo<USER> = suspend (response: HttpResponse, accessToken: String) -> UserInfo.Result<USER>

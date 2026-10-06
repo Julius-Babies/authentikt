@@ -16,6 +16,7 @@ val oidcPlugin = OIDCPlugin<User> {
     tokenEndpoint = "https://sso.example.com/realms/main/protocol/openid-connect/token"
     userInfoEndpoint = "https://sso.example.com/realms/main/protocol/openid-connect/userinfo"
     issuer = "https://sso.example.com/realms/main"
+    jwksUri = "https://sso.example.com/realms/main/protocol/openid-connect/certs"
     scopes("openid", "profile", "email")
 
     onUserInfo { response, accessToken ->
@@ -36,6 +37,7 @@ val oidcPlugin = OIDCPlugin<User> {
 | `userInfoEndpoint` | yes | The provider's user info endpoint |
 | `scopes(vararg)` | yes | At least one scope, usually `openid` plus whatever claims you need |
 | `applicationName` | no (default `"default"`) | Path segment of the callback URL. Use a distinct name per provider if you install several |
+| `jwksUri` | with `openid` scope | The provider's JSON Web Key Set (`jwks_uri` from the discovery document). Used to verify the signature of the ID token |
 | `issuer` | no (recommended) | Expected `iss` claim of the ID token (the `issuer` from the discovery document). If unset, the issuer is not checked |
 | `onUserInfo { response, accessToken -> UserInfo.Result<USER> }` | yes | Maps the provider's user info to your user |
 
@@ -89,7 +91,8 @@ sequenceDiagram
     B->>K: GET .../oidc/{app}/callback?code=...&state=...
     K->>P: POST token endpoint (code, code_verifier, client credentials)
     P-->>K: access_token, id_token
-    K->>K: validate ID token claims (nonce, aud, exp, iss)
+    K->>P: GET jwks_uri (only if the signing key is unknown)
+    K->>K: verify ID token signature and claims (nonce, aud, exp, iss)
     K->>P: GET user info endpoint (Bearer)
     P-->>K: claims
     K->>K: onUserInfo, set identifiedUser, nextStep()
@@ -115,11 +118,20 @@ As soon as a callback with a valid `state` and a `code` arrives, the state is co
 values. If the login fails afterwards (for example because the token exchange or `onUserInfo` fails), the step
 offers a new `authorize_url` that the user can retry with.
 
-If the `openid` scope is requested, the token response must contain an ID token. Its claims are checked: `nonce`
-must match, `aud` must contain the `clientId`, `azp` (if present) must be the `clientId`, `exp` must lie in the
-future and, if `issuer` is configured, `iss` must match. The signature of the ID token is **not** verified, because
-it is received directly from the token endpoint over TLS (allowed by
-[OpenID Connect Core, section 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation)).
+If the `openid` scope is requested, the token response must contain an ID token, which is validated as described in
+[OpenID Connect Core, section 3.1.3.7](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation):
+
+- The signature must be valid. `RS256`/`RS384`/`RS512` and `ES256`/`ES384`/`ES512` tokens are verified with the
+  keys from `jwksUri`, `HS256`/`HS384`/`HS512` tokens with the `clientSecret`. Unsigned tokens (`alg: none`) and
+  other algorithms are rejected.
+- `nonce` must match, `aud` must contain the `clientId`, `azp` (if present) must be the `clientId`, `exp` must lie
+  in the future and, if `issuer` is configured, `iss` must match. A clock difference of 30 seconds to the provider
+  is tolerated.
+
+The keys are fetched through the same HTTP client as the other provider requests (so `customSslCerts` apply) and
+cached. If a token is signed with an unknown key, for example after a key rotation, they are fetched again, at most
+once per minute.
+
 The user info endpoint stays the source of the claims passed to `onUserInfo`.
 
 > Your provider must support PKCE with `S256`. All common providers (Keycloak, Authentik, Entra ID, Google, Okta)
