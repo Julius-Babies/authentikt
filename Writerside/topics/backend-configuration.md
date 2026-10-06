@@ -63,7 +63,7 @@ provider uses a certificate from a local development CA. Currently only used by 
 The file must exist at startup.
 
 `oauth { ... }`
-: Turns authentikt into a minimal OAuth provider. See [](oauth-device-flow.md).
+: Turns authentikt into a minimal OAuth provider (authorization code and device flow). See [](oauth-device-flow.md).
 
 ## AuthentiktInstance
 
@@ -99,5 +99,6 @@ share the same in-memory session store. If you try it, use distinct `apiPrefix` 
 | `sessionTimeout must be positive` | `sessionTimeout` is zero or negative |
 | `sessionCleanupInterval must be positive` | `sessionCleanupInterval` is zero or negative |
 | `deviceCodeLifetime must be positive` | `deviceCodeLifetime` in `oauth { }` is zero or negative |
+| `authorizationCodeLifetime must be positive` | `authorizationCodeLifetime` in `oauth { }` is zero or negative |
 | `DonePlugin is required for OAuth flow` | `oauth { }` is configured but no `DonePlugin` is installed |
 | `onOAuthSuccess callback in DonePlugin is required for OAuth flow` | `oauth { }` is configured but the `DonePlugin` has no `onOAuthSuccess` |

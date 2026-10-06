@@ -20,8 +20,13 @@ collects common setup problems.
 
 ### Protocol
 
-- **Error responses** are not uniform. Only unknown or expired sessions have a dedicated format (`404`, see
-  [](http-api.md#errors)).
+- **OAuth**: only the authorization code grant (with PKCE `S256` or client secret) and the device flow are supported.
+  There is no `refresh_token` grant, no token revocation or introspection, and no OpenID Connect (`id_token`,
+  discovery). Authorization codes are kept in memory, and redeeming a code twice does not revoke the token issued
+  the first time.
+
+- **Error responses** are not uniform. The `/oauth` routes use RFC 6749 errors, and unknown or expired sessions have
+  a dedicated format (`404`, see [](http-api.md#errors)).
 
 ### Frontend
 

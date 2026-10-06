@@ -2,6 +2,8 @@ package es.jvbabi.authentikt.core.step.plugins.builtin
 
 import es.jvbabi.authentikt.core.AuthentiktInstance
 import es.jvbabi.authentikt.core.config.OAuthAccessToken
+import es.jvbabi.authentikt.core.oauth.AuthorizationCodeRedirectKey
+import es.jvbabi.authentikt.core.oauth.issueAuthorizationCode
 import es.jvbabi.authentikt.core.routes.flow.respondStepNotActive
 import es.jvbabi.authentikt.core.session.Session
 import es.jvbabi.authentikt.core.session.SessionDestination
@@ -34,6 +36,26 @@ class DonePlugin<USER>(
                 if (session.destination is SessionDestination.DeviceFlow) {
                     call.respondGson(buildGenericMap {
                         put("type", "device_flow_success")
+                    })
+                    return@get
+                }
+                if (session.destination is SessionDestination.OAuth) {
+                    val oAuthConfiguration = requireNotNull(authentiktInstance.configuration.oAuthConfiguration) {
+                        "OAuth session ${session.sessionId} requires oauth { } to be configured"
+                    }
+                    // Issue the authorization code only once, even if the client requests this route several times
+                    val redirectTo = session.withLock {
+                        session.attributes[AuthorizationCodeRedirectKey]?.let { return@withLock it }
+                        requireNotNull(session.identifiedUser) { "OAuth session ${session.sessionId} has no identified user" }
+                        issueAuthorizationCode(session, oAuthConfiguration).also { redirectTo ->
+                            session.attributes[AuthorizationCodeRedirectKey] = redirectTo
+                            session.authenticationSteps[session.authenticationSteps.lastIndex] = this@DonePlugin to DoneState(completed = true)
+                            session.invalidate()
+                        }
+                    }
+                    call.respondGson(buildGenericMap {
+                        put("type", "redirect")
+                        put("to", redirectTo)
                     })
                     return@get
                 }

@@ -29,7 +29,7 @@ inputs are:
 
 - `session.identifiedUser`: `null` until a user has been identified. `identifiedUser.user` is your own user object.
 - `session.has(plugin)`: whether a step has been completed.
-- `session.destination`: whether the login belongs to a device in the [device flow](oauth-device-flow.md).
+- `session.destination`: whether the login belongs to an [OAuth client or a device](oauth-device-flow.md).
 - `session.attributes`: any data you stored yourself.
 
 ### Password, then optional TOTP

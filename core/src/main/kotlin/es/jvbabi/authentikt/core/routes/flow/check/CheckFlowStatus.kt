@@ -44,6 +44,7 @@ internal fun <USER> Route.checkFlowStatus() {
                         put("application_id", session.destination.applicationId)
                         put("application_name", session.destination.applicationName)
                         put("redirect_uri", session.destination.redirectUri)
+                        put("scopes", session.destination.scopes)
                     }
                 }
             })
